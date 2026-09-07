@@ -3,7 +3,7 @@ import axios from 'axios'
 // Backend Express.js sekarang berjalan terpisah (server sendiri).
 // Saat dev: proxy '/api' -> VITE proxy ke backend (lihat vite.config.js).
 // Saat production: set VITE_API_URL ke URL backend, contoh: https://api.domainanda.go.id/api
-const api = axios.create({ baseURL: import.meta.env.VITE_API_URL || '/api' })
+const api = axios.create({ baseURL: import.meta.env.VITE_API_URL || 'https://sipinter-pu-production.up.railway.app/api' })
 
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem('token')
