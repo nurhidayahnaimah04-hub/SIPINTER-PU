@@ -1,0 +1,8 @@
+node_modules/
+.env
+storage/profil/*
+storage/lampiran-tugas/*
+storage/bukti-kerja/*
+!storage/profil/.gitkeep
+!storage/lampiran-tugas/.gitkeep
+!storage/bukti-kerja/.gitkeep
