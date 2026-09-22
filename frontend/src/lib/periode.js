@@ -21,30 +21,35 @@ export function periodeLabel(periode) {
   return `Tahun ${periode.tahun}${semesterPart}`
 }
 
-// Ambil daftar periode (tahun anggaran) dari server. Setiap item: { id, tahun, status, ... }
+// Ambil daftar periode (tahun anggaran) dari server.
 export async function fetchPeriodes() {
-  const res = await api.get('/periodes')
-  return res.data
+  try {
+    const res = await api.get('/periode')
+    const data = res.data?.data || res.data
+    return Array.isArray(data) ? data : []
+  } catch (err) {
+    console.error('Error fetching periodes:', err)
+    return []
+  }
 }
 
-// Kabalai membuka periode/tahun anggaran baru. Semester 1 & 2 otomatis "ada" begitu tahun
-// ini dibuat -- tidak perlu dibuat terpisah, karena semester hanya lensa tanggal.
+// Kabalai membuka periode/tahun anggaran baru.
 export async function createPeriode(tahun, catatan = null) {
-  const res = await api.post('/periodes', { tahun, catatan })
+  const res = await api.post('/periode', { tahun, catatan })
   return res.data
 }
 
 export async function aktifkanPeriode(periodeId) {
-  const res = await api.post(`/periodes/${periodeId}/aktifkan`)
+  const res = await api.post(`/periode/${periodeId}/aktifkan`)
   return res.data
 }
 
 export async function fetchHistoriSemester(periodeId) {
-  const res = await api.get(`/periodes/${periodeId}/histori-semester`)
+  const res = await api.get(`/periode/${periodeId}/histori-semester`)
   return res.data
 }
 
 export async function hapusPeriode(periodeId) {
-  const res = await api.delete(`/periodes/${periodeId}`)
+  const res = await api.delete(`/periode/${periodeId}`)
   return res.data
 }
