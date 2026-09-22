@@ -5,7 +5,8 @@ const rawBaseURL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api'
 const baseURL = rawBaseURL.replace(/\/+$/, '')
 
 const api = axios.create({ 
-  baseURL: baseURL
+  baseURL: baseURL,
+  maxRedirects: 0 // Cegah redirect otomatis yang menghapus token JWT
 })
 
 api.interceptors.request.use((config) => {
