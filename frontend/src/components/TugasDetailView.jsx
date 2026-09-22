@@ -297,9 +297,34 @@ export default function TugasDetailView({ basePath, role }) {
                   ))}
                 </div>
               ) : (
-                <span>Klik untuk melampirkan file</span>
+                <span>
+                  Klik untuk melampirkan file <br />
+                  <small className="text-gray-400">(Maksimal 5 MB per file)</small>
+                </span>
               )}
-              <input type="file" multiple hidden accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.csv,.txt,.zip" onChange={(e) => setSubtugasFiles(Array.from(e.target.files))} />
+              
+              <input 
+                type="file" 
+                multiple 
+                hidden 
+                accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.csv,.txt,.zip" 
+                onChange={(e) => {
+                  const selectedFiles = Array.from(e.target.files);
+                  const MAX_SIZE = 5 * 1024 * 1024; // Batas 5 MB dalam Byte
+
+                  // Cek apakah ada file yang ukurannya > 5 MB
+                  const isOverSize = selectedFiles.some((file) => file.size > MAX_SIZE);
+
+                  if (isOverSize) {
+                    alert("Ada file yang ukurannya melebihi 5 MB! Harap pilih file yang lebih kecil.");
+                    e.target.value = ""; // Batalkan pilihan file
+                    return;
+                  }
+
+                  // Jika ukuran file aman (<= 5 MB), simpan file
+                  setSubtugasFiles(selectedFiles);
+                }} 
+              />
             </label>
           </div>
 

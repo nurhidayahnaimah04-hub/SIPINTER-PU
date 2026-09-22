@@ -305,9 +305,34 @@ export default function SubtugasRow({ subtugas, role, onChanged, users = [] }) {
                     ))}
                   </div>
                 ) : (
-                  <span>Klik untuk melampirkan file tambahan</span>
+                  <span>
+                    Klik untuk melampirkan file tambahan <br />
+                    <small className="text-gray-400">(Maksimal 5 MB per file)</small>
+                  </span>
                 )}
-                <input type="file" multiple hidden accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.csv,.txt,.zip" onChange={(e) => setEditFiles(Array.from(e.target.files))} />
+
+                <input
+                  type="file"
+                  multiple
+                  hidden
+                  accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.csv,.txt,.zip"
+                  onChange={(e) => {
+                    const selectedFiles = Array.from(e.target.files);
+                    const MAX_SIZE = 5 * 1024 * 1024; // 5 MB dalam Bytes
+
+                    // Cek apakah ada file yang ukurannya melebihi 5 MB
+                    const isOverSize = selectedFiles.some((file) => file.size > MAX_SIZE);
+
+                    if (isOverSize) {
+                      alert("Ada file yang ukurannya melebihi 5 MB! Harap pilih file yang lebih kecil.");
+                      e.target.value = ""; // Batalkan pilihan file
+                      return;
+                    }
+
+                    // Jika semua file <= 5 MB, simpan file seperti biasa
+                    setEditFiles(selectedFiles);
+                  }}
+                />
               </label>
             </div>
 

@@ -10,13 +10,20 @@ dotenv.config();
 
 const app = express();
 
-const allowedOrigins = (process.env.FRONTEND_URL || 'http://localhost:5173')
-  .split(',')
-  .map((s) => s.trim());
-
 app.use(
   cors({
-    origin: allowedOrigins,
+    origin: (origin, callback) => {
+      if (!origin || origin.startsWith('http://localhost:')) {
+        return callback(null, true);
+      }
+      
+      const allowedOrigins = (process.env.FRONTEND_URL || '').split(',').map((s) => s.trim());
+      if (allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+
+      return callback(new Error('Akses diblokir oleh kebijakan CORS'));
+    },
     credentials: true,
   })
 );
@@ -24,8 +31,6 @@ app.use(
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// File upload (foto profil, lampiran tugas, bukti kerja) diserve statis,
-// setara dengan `php artisan storage:link` + asset('storage/...') di Laravel.
 app.use('/storage', express.static(path.join(process.cwd(), 'storage')));
 
 app.get('/', (req, res) => {
@@ -34,12 +39,10 @@ app.get('/', (req, res) => {
 
 app.use('/api', apiRoutes);
 
-// 404 handler
 app.use((req, res) => {
   res.status(404).json({ message: 'Route tidak ditemukan.' });
 });
 
-// Error handler
 // eslint-disable-next-line no-unused-vars
 app.use((err, req, res, next) => {
   if (err instanceof multer.MulterError) {
@@ -54,7 +57,6 @@ const PORT = process.env.PORT || 8000;
 app.listen(PORT, () => {
   console.log(`Server berjalan di http://localhost:${PORT}`);
 
-  // Bersihkan notifikasi >30 hari sekali saat server nyala, lalu ulangi tiap 24 jam.
   hapusNotifikasiKedaluwarsa().catch((err) => console.error('[cleanup] gagal:', err));
   setInterval(() => {
     hapusNotifikasiKedaluwarsa().catch((err) => console.error('[cleanup] gagal:', err));

@@ -109,55 +109,76 @@ export default function TaskDetail() {
               <label className="flex flex-col items-center justify-center gap-1 border-2 border-dashed border-gray-300 rounded-lg py-6 cursor-pointer hover:border-brand-400 text-sm text-gray-500">
                 <UploadCloud size={22} />
                 {files.length ? `${files.length} file dipilih` : 'Klik untuk pilih file (bisa lebih dari satu)'}
-                <input type="file" multiple hidden accept="image/*,.pdf,.doc,.docx,.xlsx" onChange={(e) => setFiles(Array.from(e.target.files))} />
-              </label>
-            </div>
-            <button className="btn bg-pupr-blue-dark hover:bg-pupr-blue text-white transition-colors disabled:opacity-60 w-full" disabled={saving}>{saving ? 'Menyimpan...' : 'Kirim Update'}</button>
-          </form>
-        )}
-      </div>
+                <input
+                    type="file"
+                    multiple
+                    hidden
+                    accept="image/*,.pdf,.doc,.docx,.xlsx"
+                    onChange={(e) => {
+                      const selectedFiles = Array.from(e.target.files);
+                      const MAX_SIZE = 5 * 1024 * 1024; // 5 MB
 
-      <div className="card p-6 mb-6">
-        <h2 className="font-semibold text-gray-900 mb-4">Riwayat Update</h2>
-        {!task.updates?.length ? <p className="text-sm text-gray-400">Belum ada riwayat.</p> : (
-          <div className="space-y-4">
-            {task.updates.map((u) => (
-              <div key={u.id} className="border-b border-gray-100 last:border-0 pb-4 last:pb-0">
-                <div className="flex justify-between text-sm">
-                  <span className="font-medium text-gray-800">{u.persentase}% — {u.status}</span>
-                  <span className="text-xs text-gray-400">{formatDate(u.created_at)}</span>
-                </div>
-                {u.catatan && <p className="text-sm text-gray-600 mt-1">{u.catatan}</p>}
-                {u.files?.length > 0 && (
-                  <div className="flex flex-wrap gap-2 mt-2">
-                    {u.files.map((f) => (
-                      <a key={f.id} href={f.url} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-xs text-brand-600 hover:underline">
-                        <Paperclip size={12} /> Bukti {f.id}
-                      </a>
-                    ))}
+                      // Cek apakah ada file yang ukurannya melebihi 5 MB
+                      const isOverSize = selectedFiles.some((file) => file.size > MAX_SIZE);
+
+                      if (isOverSize) {
+                        alert("Ada file yang ukurannya melebihi 5 MB! Harap pilih file yang lebih kecil.");
+                        e.target.value = ""; // Batalkan pilihan file
+                        return;
+                      }
+
+                      // Jika semua file <= 5 MB, simpan file
+                      setFiles(selectedFiles);
+                    }}
+                  />
+                </label>
+              </div>
+              <button className="btn bg-pupr-blue-dark hover:bg-pupr-blue text-white transition-colors disabled:opacity-60 w-full" disabled={saving}>{saving ? 'Menyimpan...' : 'Kirim Update'}</button>
+            </form>
+          )}
+        </div>
+
+        <div className="card p-6 mb-6">
+          <h2 className="font-semibold text-gray-900 mb-4">Riwayat Update</h2>
+          {!task.updates?.length ? <p className="text-sm text-gray-400">Belum ada riwayat.</p> : (
+            <div className="space-y-4">
+              {task.updates.map((u) => (
+                <div key={u.id} className="border-b border-gray-100 last:border-0 pb-4 last:pb-0">
+                  <div className="flex justify-between text-sm">
+                    <span className="font-medium text-gray-800">{u.persentase}% — {u.status}</span>
+                    <span className="text-xs text-gray-400">{formatDate(u.created_at)}</span>
                   </div>
-                )}
+                  {u.catatan && <p className="text-sm text-gray-600 mt-1">{u.catatan}</p>}
+                  {u.files?.length > 0 && (
+                    <div className="flex flex-wrap gap-2 mt-2">
+                      {u.files.map((f) => (
+                        <a key={f.id} href={f.url} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-xs text-brand-600 hover:underline">
+                          <Paperclip size={12} /> Bukti {f.id}
+                        </a>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="card p-6">
+          <h2 className="font-semibold text-gray-900 mb-4 flex items-center gap-2"><MessageSquare size={17} /> Diskusi</h2>
+          <div className="space-y-3 mb-4 max-h-64 overflow-y-auto">
+            {!comments.length ? <p className="text-sm text-gray-400">Belum ada komentar.</p> : comments.map((c) => (
+              <div key={c.id} className="text-sm">
+                <span className="font-medium text-gray-800">{c.user?.name}</span>
+                <p className="text-gray-600">{c.komentar}</p>
               </div>
             ))}
           </div>
-        )}
-      </div>
-
-      <div className="card p-6">
-        <h2 className="font-semibold text-gray-900 mb-4 flex items-center gap-2"><MessageSquare size={17} /> Diskusi</h2>
-        <div className="space-y-3 mb-4 max-h-64 overflow-y-auto">
-          {!comments.length ? <p className="text-sm text-gray-400">Belum ada komentar.</p> : comments.map((c) => (
-            <div key={c.id} className="text-sm">
-              <span className="font-medium text-gray-800">{c.user?.name}</span>
-              <p className="text-gray-600">{c.komentar}</p>
-            </div>
-          ))}
+          <form onSubmit={handleComment} className="flex gap-2">
+            <input className="input flex-1" placeholder="Tulis komentar..." value={comment} onChange={(e) => setComment(e.target.value)} />
+            <button className="btn bg-pupr-blue-dark hover:bg-pupr-blue text-white transition-colors disabled:opacity-60"><Send size={16} /></button>
+          </form>
         </div>
-        <form onSubmit={handleComment} className="flex gap-2">
-          <input className="input flex-1" placeholder="Tulis komentar..." value={comment} onChange={(e) => setComment(e.target.value)} />
-          <button className="btn bg-pupr-blue-dark hover:bg-pupr-blue text-white transition-colors disabled:opacity-60"><Send size={16} /></button>
-        </form>
       </div>
-    </div>
   )
 }
