@@ -1,12 +1,11 @@
 import axios from 'axios'
 
-// Otomatis bersihkan tanda '/' di akhir URL jika ada
-const rawBaseURL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api'
-const baseURL = rawBaseURL.replace(/\/+$/, '')
+// Tulis langsung URL Railway agar tidak tergantung pada Vercel Env Var
+const baseURL = 'https://sipinter-pu-production.up.railway.app/api'
 
 const api = axios.create({ 
   baseURL: baseURL,
-  maxRedirects: 0 // Cegah redirect otomatis yang menghapus token JWT
+  maxRedirects: 0
 })
 
 api.interceptors.request.use((config) => {
