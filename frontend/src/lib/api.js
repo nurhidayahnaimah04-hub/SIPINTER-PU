@@ -1,7 +1,11 @@
 import axios from 'axios'
 
+// Otomatis bersihkan tanda '/' di akhir URL jika ada
+const rawBaseURL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api'
+const baseURL = rawBaseURL.replace(/\/+$/, '')
+
 const api = axios.create({ 
-  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:8000/api'
+  baseURL: baseURL
 })
 
 api.interceptors.request.use((config) => {
