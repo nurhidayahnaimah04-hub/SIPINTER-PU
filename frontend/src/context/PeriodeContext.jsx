@@ -15,9 +15,17 @@ export function PeriodeProvider({ children }) {
   const [loading, setLoading] = useState(true)
 
   const muatUlangPeriodes = useCallback(async () => {
-    const data = await fetchPeriodes()
-    setPeriodes(data)
-    return data
+    try {
+      const res = await fetchPeriodes()
+      // PENTING: Mencegah crash jika response API bukan array
+      const list = Array.isArray(res) ? res : (Array.isArray(res?.data) ? res.data : [])
+      setPeriodes(list)
+      return list
+    } catch (err) {
+      console.error('Gagal memuat periodes:', err)
+      setPeriodes([])
+      return []
+    }
   }, [])
 
   useEffect(() => {
@@ -27,8 +35,11 @@ export function PeriodeProvider({ children }) {
       try {
         const data = await muatUlangPeriodes()
         if (!aktif) return
-        // default: periode aktif (kalau ada), fallback ke tahun terbaru
-        const terpilih = data.find((p) => p.status === 'aktif') || data[0]
+        
+        // PENTING: Gunakan Array.isArray sebelum .find() untuk mencegah TypeError
+        const listData = Array.isArray(data) ? data : []
+        const terpilih = listData.find((p) => p.status === 'aktif') || listData[0]
+        
         if (terpilih) {
           setPeriodeState({
             periode_id: terpilih.id,
@@ -54,7 +65,8 @@ export function PeriodeProvider({ children }) {
 
   // ganti periode (tahun) yang dipilih, lewat periode_id -- cari di state `periodes` yang ada
   function pilihPeriode(periodeId) {
-    const p = periodes.find((x) => x.id === Number(periodeId))
+    const list = Array.isArray(periodes) ? periodes : []
+    const p = list.find((x) => x.id === Number(periodeId))
     if (!p) return
     setPeriodeState((prev) => ({ ...prev, periode_id: p.id, tahun: p.tahun, status: p.status }))
   }
@@ -76,9 +88,10 @@ export function PeriodeProvider({ children }) {
   async function hapusPeriode(periodeId) {
     await hapusPeriodeApi(periodeId)
     const data = await muatUlangPeriodes()
+    const listData = Array.isArray(data) ? data : []
     // kalau yang dihapus adalah periode yang lagi dipilih, pindah ke periode aktif/terbaru lain
     if (periode.periode_id === Number(periodeId)) {
-      const pengganti = data.find((p) => p.status === 'aktif') || data[0]
+      const pengganti = listData.find((p) => p.status === 'aktif') || listData[0]
       if (pengganti) {
         setPeriodeState((prev) => ({ ...prev, periode_id: pengganti.id, tahun: pengganti.tahun, status: pengganti.status }))
       } else {
