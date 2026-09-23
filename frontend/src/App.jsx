@@ -69,6 +69,8 @@ export default function App() {
 
       {/* Katim */}
       <Route path="/katim" element={<Protected roles={['katim']}><KatimDashboard /></Protected>} />
+      <Route path="/katim/subtugas" element={<Protected roles={['katim']}><AnggotaSubtugas /></Protected>} />
+      <Route path="/katim/subtugas/:id" element={<Protected roles={['katim']}><AnggotaSubtugasDetail /></Protected>} />
       <Route path="/katim/tugas" element={<Protected roles={['katim']}><KatimTugas /></Protected>} />
       <Route path="/katim/tugas/:id" element={<Protected roles={['katim']}><KatimTugasDetail /></Protected>} />
       <Route path="/katim/verifikasi" element={<Protected roles={['katim']}><KatimVerifikasi /></Protected>} />

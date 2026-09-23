@@ -4,7 +4,7 @@ import * as NotificationService from '../services/notificationService.js';
 import { recalculateProgress, getLocked } from '../utils/tugasHelper.js';
 import { classifyFileType, uploadToSupabase, fileUrl } from '../middleware/upload.js';
 
-// Anggota mengirim update progres + bukti (foto/pdf/word/excel/dll, multi-file).
+// Anggota/Katim mengirim update progres + bukti (foto/pdf/word/excel/dll, multi-file).
 export async function store(req, res) {
   const user = req.user;
   const subtugasId = req.params.subtugas;
@@ -28,8 +28,16 @@ export async function store(req, res) {
     return res.status(422).json({ message: 'Persentase tidak valid (0-100).' });
   }
 
+  // Cek apakah user yang mengirim update ini bertindak sebagai Katim
+  const isKatim = user.role === 'katim';
+
   const catatan = req.body?.catatan || null;
-  const newStatus = persentase >= 100 ? 'Menunggu Verifikasi Katim' : 'Sedang Berjalan';
+
+  // Logika Status: Jika Katim yang mengerjakan & persentase 100%, langsung lanjut ke Kasubag
+  let newStatus = 'Sedang Berjalan';
+  if (persentase >= 100) {
+    newStatus = isKatim ? 'Menunggu Verifikasi Kasubag' : 'Menunggu Verifikasi Katim';
+  }
 
   const { rows: updateRows } = await pool.query(
     `INSERT INTO subtugas_updates (subtugas_id, user_id, persentase, catatan, status)
@@ -40,9 +48,6 @@ export async function store(req, res) {
 
   const files = req.files || [];
   for (const f of files) {
-    // Upload ke Supabase Storage (bukan disk lokal) supaya bukti kerja ini bisa dibuka
-    // oleh staff lain (katim/kasubag) dari instance backend mana pun, tidak "Route tidak
-    // ditemukan" gara-gara filenya cuma ada di disk instance yang menerima upload.
     const { url } = await uploadToSupabase(f, 'bukti-kerja');
     const type = classifyFileType(f.originalname);
     await pool.query(
@@ -52,16 +57,25 @@ export async function store(req, res) {
     );
   }
 
+  // Tentukan status verifikasi Katim: Jika dikerjakan Katim, otomatis 'disetujui'
+  let verifikasiKatimStatus = null;
+  if (newStatus === 'Menunggu Verifikasi Katim') {
+    verifikasiKatimStatus = 'menunggu';
+  } else if (newStatus === 'Menunggu Verifikasi Kasubag' && isKatim) {
+    verifikasiKatimStatus = 'disetujui';
+  }
+
   // Progress subtugas = snapshot update terbaru. Reset verifikasi kalau direvisi ulang.
   await pool.query(
     `UPDATE subtugas SET progress = $1, status = $2,
         verifikasi_katim_status = $3, verifikasi_kasubag_status = NULL, updated_at = now()
      WHERE id = $4`,
-    [persentase, newStatus, newStatus === 'Menunggu Verifikasi Katim' ? 'menunggu' : null, subtugasId]
+    [persentase, newStatus, verifikasiKatimStatus, subtugasId]
   );
 
   await recalculateProgress(subtugas.tugas_id);
 
+  // Kirim Notifikasi Sesuai Peran
   if (newStatus === 'Menunggu Verifikasi Katim') {
     const { rows: teamRows } = await pool.query(
       `SELECT tm.katim_id FROM tugas t JOIN teams tm ON tm.id = t.team_id WHERE t.id = $1`,
@@ -76,6 +90,15 @@ export async function store(req, res) {
         '/katim/verifikasi'
       );
     }
+  } else if (newStatus === 'Menunggu Verifikasi Kasubag') {
+    // Kirim notifikasi langsung ke semua Kasubag jika pengerjaan oleh Katim
+    const { rows: kasubagRows } = await pool.query(`SELECT id FROM users WHERE role = 'kasubag'`);
+    await NotificationService.kirimKeBanyak(
+      kasubagRows.map((r) => r.id),
+      'Subtugas menunggu verifikasi akhir',
+      `Katim ${user.name} menyelesaikankan subtugas '${subtugas.judul}', menunggu verifikasi Anda.`,
+      '/kasubag/verifikasi'
+    );
   }
 
   await ActivityLog.catat(

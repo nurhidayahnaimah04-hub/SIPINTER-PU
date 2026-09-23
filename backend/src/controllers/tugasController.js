@@ -176,13 +176,21 @@ export async function show(req, res) {
 
   // BACA SIAPA YANG SEDANG LOGIN: Jika Katim, berikan juga daftar anggota timnya
   // agar Katim bisa assign anggotanya sendiri di Tugas Umum
+  // BACA SIAPA YANG SEDANG LOGIN: Jika Katim, berikan juga daftar anggota tim + Katim sendiri
   if (req.user.role === 'katim') {
     const { rows: myTeamRows } = await pool.query(
-      `SELECT COALESCE(json_agg(json_build_object('id', mu.id, 'name', mu.name)), '[]'::json) as members
-       FROM teams tm
-       JOIN team_members mem ON mem.team_id = tm.id
-       JOIN users mu ON mu.id = mem.user_id
-       WHERE tm.katim_id = $1`,
+      `SELECT COALESCE(
+         json_agg(json_build_object('id', u.id, 'name', u.name)), 
+         '[]'::json
+       ) as members
+       FROM users u
+       WHERE u.id = $1 
+          OR u.id IN (
+            SELECT mem.user_id 
+            FROM teams tm 
+            JOIN team_members mem ON mem.team_id = tm.id 
+            WHERE tm.katim_id = $1
+          )`,
       [req.user.id]
     );
     tugas.my_team_members = myTeamRows[0]?.members || [];
