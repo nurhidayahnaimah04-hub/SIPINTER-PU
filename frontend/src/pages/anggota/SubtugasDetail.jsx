@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import api from '../../lib/api'
 import { useAutoRefresh } from '../../lib/useAutoRefresh'
+import { useAuth } from '../../context/AuthContext'
 import ProgressBar from '../../components/ProgressBar'
 import Loading from '../../components/Loading'
 import { formatDate, statusBadgeClass } from '../../lib/helpers'
@@ -9,6 +10,7 @@ import { ArrowLeft, Paperclip, UploadCloud, Lock, MessageSquare } from 'lucide-r
 
 export default function SubtugasDetail() {
   const { id } = useParams()
+  const { user } = useAuth()
   const [subtugas, setSubtugas] = useState(null)
   const [persentase, setPersentase] = useState(0)
   const [catatan, setCatatan] = useState('')
@@ -60,7 +62,7 @@ export default function SubtugasDetail() {
   
   return (
     <div>
-      <Link to="/anggota/subtugas" className="inline-flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700 mb-4">
+      <Link to={`/${user?.role}/subtugas`} className="inline-flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700 mb-4">
         <ArrowLeft size={15} /> Kembali
       </Link>
 
@@ -136,84 +138,81 @@ export default function SubtugasDetail() {
                     <label className="label">Catatan</label>
                     <textarea className="input" rows={3} value={catatan} onChange={(e) => setCatatan(e.target.value)} placeholder="Jelaskan progres yang sudah dikerjakan..." />
                   </div>
-          <div className="sm:col-span-2">
-            <label className="label">Bukti Kerja (foto, PDF, Word, Excel, dll)</label>
-            <label className="flex flex-col items-center justify-center gap-1 border-2 border-dashed border-gray-300 rounded-lg py-6 px-4 cursor-pointer hover:border-brand-400 text-sm text-gray-500 text-center">
-              <UploadCloud size={22} />
-              
-              {files.length > 0 ? (
-                <div className="flex flex-col items-center mt-2 w-full">
-                  <span className="font-semibold text-brand-600 mb-1">{files.length} file dipilih:</span>
-                  {files.map((f, index) => (
-                    <span key={index} className="text-xs text-gray-600 truncate max-w-xs sm:max-w-sm w-full">
-                      • {f.name}
-                    </span>
-                  ))}
-                </div>
-              ) : (
-                <>
-                  <span>Klik untuk pilih file (bisa lebih dari satu)</span>
-                  <span className="text-xs text-gray-400">Maksimal ukuran file 5 MB</span>
-                </>
-              )}
+                  <div className="sm:col-span-2">
+                    <label className="label">Bukti Kerja (foto, PDF, Word, Excel, dll)</label>
+                    <label className="flex flex-col items-center justify-center gap-1 border-2 border-dashed border-gray-300 rounded-lg py-6 px-4 cursor-pointer hover:border-brand-400 text-sm text-gray-500 text-center">
+                      <UploadCloud size={22} />
+                      
+                      {files.length > 0 ? (
+                        <div className="flex flex-col items-center mt-2 w-full">
+                          <span className="font-semibold text-brand-600 mb-1">{files.length} file dipilih:</span>
+                          {files.map((f, index) => (
+                            <span key={index} className="text-xs text-gray-600 truncate max-w-xs sm:max-w-sm w-full">
+                              • {f.name}
+                            </span>
+                          ))}
+                        </div>
+                      ) : (
+                        <>
+                          <span>Klik untuk pilih file (bisa lebih dari satu)</span>
+                          <span className="text-xs text-gray-400">Maksimal ukuran file 5 MB</span>
+                        </>
+                      )}
 
-              <input
-                type="file"
-                multiple
-                hidden
-                accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.csv,.txt,.zip"
-                onChange={(e) => {
-                  const selectedFiles = Array.from(e.target.files);
-                  const MAX_SIZE = 5 * 1024 * 1024; // 5 MB
-                  // ... kode logik validasi kamu di bawahnya tetap sama
+                      <input
+                        type="file"
+                        multiple
+                        hidden
+                        accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.csv,.txt,.zip"
+                        onChange={(e) => {
+                          const selectedFiles = Array.from(e.target.files);
+                          const MAX_SIZE = 5 * 1024 * 1024; // 5 MB
 
-                      // Cek apakah ada file yang ukurannya > 5 MB
-                      const isOverSize = selectedFiles.some((file) => file.size > MAX_SIZE);
+                          const isOverSize = selectedFiles.some((file) => file.size > MAX_SIZE);
 
-                      if (isOverSize) {
-                        alert("Ada file yang ukurannya melebihi 5 MB! Harap pilih file yang lebih kecil.");
-                        e.target.value = ""; // Batalkan pilihan file
-                        return;
-                      }
+                          if (isOverSize) {
+                            alert("Ada file yang ukurannya melebihi 5 MB! Harap pilih file yang lebih kecil.");
+                            e.target.value = "";
+                            return;
+                          }
 
-                      // Jika semua file <= 5 MB, simpan file
-                      setFiles(selectedFiles);
-                    }}
-                  />
-                </label>
-              </div>
-            </div>
-            <button className="btn bg-pupr-blue-dark hover:bg-pupr-blue text-white transition-colors disabled:opacity-60 w-full sm:w-auto sm:px-8" disabled={saving}>{saving ? 'Menyimpan...' : 'Kirim Update'}</button>
-          </form>
-        )}
-      </div>
-
-      <div className="card p-6">
-        <h2 className="font-semibold text-gray-900 mb-4">Riwayat Update</h2>
-        {visibleUpdates.length === 0 ? <p className="text-sm text-gray-400">Belum ada riwayat progres dari anggota.</p> : (
-          <div className="grid sm:grid-cols-2 gap-4">
-            {visibleUpdates.map((u) => (
-              <div key={u.id} className="border border-gray-100 rounded-lg p-4">
-                <div className="flex justify-between text-sm">
-                  <span className="font-medium text-gray-800">{u.persentase}% — {u.status}</span>
-                  <span className="text-xs text-gray-400">{formatDate(u.created_at)}</span>
-                </div>
-                {u.catatan && <p className="text-sm text-gray-600 mt-1">{u.catatan}</p>}
-                {u.files?.length > 0 && (
-                  <div className="flex flex-wrap gap-2 mt-2">
-                    {u.files.map((f) => (
-                      <a key={f.id} href={f.url} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-xs text-brand-600 hover:underline">
-                        <Paperclip size={12} /> {f.file_name || `Bukti ${f.id}`}
-                      </a>
-                    ))}
+                          setFiles(selectedFiles);
+                        }}
+                      />
+                    </label>
                   </div>
-                )}
-              </div>
-            ))}
+                </div>
+                <button className="btn bg-pupr-blue-dark hover:bg-pupr-blue text-white transition-colors disabled:opacity-60 w-full sm:w-auto sm:px-8" disabled={saving}>{saving ? 'Menyimpan...' : 'Kirim Update'}</button>
+              </form>
+            )}
           </div>
-        )}
-      </div>
-    </div>
+
+          <div className="card p-6">
+            <h2 className="font-semibold text-gray-900 mb-4">Riwayat Update</h2>
+            {visibleUpdates.length === 0 ? <p className="text-sm text-gray-400">Belum ada riwayat progres dari anggota.</p> : (
+              <div className="grid sm:grid-cols-2 gap-4">
+                {visibleUpdates.map((u) => (
+                  <div key={u.id} className="border border-gray-100 rounded-lg p-4">
+                    <div className="flex justify-between text-sm">
+                      <span className="font-medium text-gray-800">{u.persentase}% — {u.status}</span>
+                      <span className="text-xs text-gray-400">{formatDate(u.created_at)}</span>
+                    </div>
+                    {u.catatan && <p className="text-sm text-gray-600 mt-1">{u.catatan}</p>}
+                    {u.files?.length > 0 && (
+                      <div className="flex flex-wrap gap-2 mt-2">
+                        {u.files.map((f) => (
+                          <a key={f.id} href={f.url} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-xs text-brand-600 hover:underline">
+                            <Paperclip size={12} /> {f.file_name || `Bukti ${f.id}`}
+                          </a>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
 
         {/* Sidebar catatan atasan */}
         <div className="card p-6 lg:sticky lg:top-6">

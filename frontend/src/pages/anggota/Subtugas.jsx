@@ -2,6 +2,7 @@ import { useState } from 'react'
 import api from '../../lib/api'
 import { useAutoRefresh } from '../../lib/useAutoRefresh'
 import { usePeriode } from '../../context/PeriodeContext'
+import { useAuth } from '../../context/AuthContext' // 1. Tambahkan import ini
 import { Link } from 'react-router-dom'
 import ProgressBar from '../../components/ProgressBar'
 import Loading from '../../components/Loading'
@@ -12,6 +13,7 @@ const STATUSES = ['Belum Dimulai', 'Sedang Berjalan', 'Menunggu Verifikasi Katim
 
 export default function Subtugas() {
   const { periode } = usePeriode()
+  const { user } = useAuth() // 2. Ambil data user yang sedang login
   const [items, setItems] = useState(null)
   const [statusFilter, setStatusFilter] = useState('')
 
@@ -41,7 +43,8 @@ export default function Subtugas() {
       {!items ? <Loading /> : !items.length ? <EmptyState text="Belum ada subtugas pada periode ini." /> : (
         <div className="grid md:grid-cols-2 gap-4">
           {items.map((t) => (
-            <Link key={t.id} to={`/anggota/subtugas/${t.id}`} className="card p-5 hover:shadow-md transition-shadow">
+            /* 3. Ubah rute /anggota/ menjadi /${user?.role}/ */
+            <Link key={t.id} to={`/${user?.role}/subtugas/${t.id}`} className="card p-5 hover:shadow-md transition-shadow">
               <h3 className="font-semibold text-gray-900">{t.judul}</h3>
               <p className="text-sm text-gray-500 mt-1">{t.tugas?.judul}</p>
               <div className="mt-3">
