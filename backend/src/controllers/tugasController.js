@@ -15,7 +15,7 @@ export async function index(req, res) {
   if (periodeId) {
     params.push(periodeId);
     conditions.push(`t.periode_id = $${params.length}`);
-  
+  }
 
   if (semester === 1 || semester === 2) {
     const tahun = await Semester.periodeTahun(periodeId);
