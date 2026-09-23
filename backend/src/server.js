@@ -37,6 +37,15 @@ app.get('/', (req, res) => {
   res.json({ message: 'Progress Kerja Balai PUPR API (Express.js) sedang berjalan.' });
 });
 
+// --- PERBAIKAN DI SINI: Mencegah error 404 /api/periode ---
+// Menjamin frontend yang memanggil /api/periode maupun /api/periodes sama-sama terlayani
+app.use('/api', (req, res, next) => {
+  if (req.url.startsWith('/periode') && !req.url.startsWith('/periodes')) {
+    req.url = req.url.replace('/periode', '/periodes');
+  }
+  next();
+});
+
 app.use('/api', apiRoutes);
 
 app.use((req, res) => {

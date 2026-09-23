@@ -34,6 +34,8 @@ router.post('/profile', uploadProfil.single('foto'), h(AuthController.updateProf
 router.get('/dashboard', h(DashboardController.index));
 
 // Periode (tahun anggaran)
+router.use('/periode', (req, res, next) => { req.url = req.url.replace('/periode', '/periodes'); next(); });
+
 router.get('/periodes', h(PeriodeController.index));
 router.get('/periodes/:periode/histori-semester', h(PeriodeController.historiSemester));
 router.post('/periodes', role('kabalai'), h(PeriodeController.store));
