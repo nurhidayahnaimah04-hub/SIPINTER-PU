@@ -63,19 +63,32 @@ export default function TugasDetailView({ basePath, role }) {
 
   useAutoRefresh(load, [id])
 
-  // LOGIKA ANGGOTA YANG BENAR:
+// LOGIKA ANGGOTA & KATIM (MULTI-ROLE):
   const availableUsers = useMemo(() => {
     if (!tugas) return [];
-    
-    // Jika ini Tugas Umum dan yang buka adalah Katim, pakai anggota timnya sendiri
-    // (Data ini sudah dikirim dari backend via properti my_team_members)
-    if (isTugasUmum && role === 'katim') {
-      return tugas.my_team_members || [];
+
+    let usersList = [];
+
+    // 1. Jika Katim membuka halaman, prioritaskan my_team_members (yang sudah memuat Katim + Anggota Tim)
+    if (role === 'katim' && tugas.my_team_members?.length) {
+      return tugas.my_team_members;
     }
-    
-    // Jika ini tugas biasa, pakai list anggota dari tim pemilik tugas
-    return tugas.team?.members || [];
-  }, [tugas, isTugasUmum, role]);
+
+    // 2. Jika tugas biasa yang punya tim
+    if (tugas.team) {
+      usersList = [...(tugas.team.members || [])];
+      
+      // Tambahkan Katim ke dalam list jika belum ada di members
+      if (tugas.team.katim && !usersList.some((m) => m.id === tugas.team.katim.id)) {
+        usersList.unshift({
+          id: tugas.team.katim.id,
+          name: `${tugas.team.katim.name} (Katim)`,
+        });
+      }
+    }
+
+    return usersList;
+  }, [tugas, role]);
 
   // Menggunakan FormData untuk mendukung Upload File Multi
   async function handleAddSubtugas(e) {
