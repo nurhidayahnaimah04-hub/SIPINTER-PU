@@ -59,6 +59,7 @@ export async function verifikasiKatim(req, res) {
 
   await recalculateProgress(updated.tugas_id);
 
+  // Notifikasi ke Anggota Pemilik Subtugas
   await NotificationService.kirim(
     updated.assigned_to,
     keputusan === 'disetujui' ? 'Subtugas diverifikasi katim' : 'Subtugas dikembalikan katim',
@@ -127,6 +128,7 @@ export async function verifikasiKasubag(req, res) {
 
   await recalculateProgress(updated.tugas_id);
 
+  // 1. Notifikasi ditujukan ke Anggota Pemilik Subtugas
   await NotificationService.kirim(
     updated.assigned_to,
     keputusan === 'disetujui' ? 'Subtugas selesai & terverifikasi' : 'Subtugas dikembalikan kasubag',
@@ -136,21 +138,38 @@ export async function verifikasiKasubag(req, res) {
     `/anggota/subtugas/${updated.id}`
   );
 
-  // PERBAIKAN: Gunakan JOIN ke team_members karena tabel users tidak punya team_id
-  const { rows: userRows } = await pool.query(
+  // 2. Notifikasi ditujukan juga ke Katim Pemimpin Tim
+  // Jalur A: Cari Katim via Tim Tugas Utama
+  const { rows: teamRows } = await pool.query(
     `SELECT tm.katim_id 
-     FROM team_members mem 
-     JOIN teams tm ON tm.id = mem.team_id 
-     WHERE mem.user_id = $1`,
-    [updated.assigned_to]
+     FROM subtugas s
+     JOIN tugas t ON t.id = s.tugas_id
+     LEFT JOIN teams tm ON tm.id = t.team_id
+     WHERE s.id = $1`,
+    [updated.id]
   );
   
-  const katimId = userRows[0]?.katim_id;
+  let katimId = teamRows[0]?.katim_id;
+
+  // Jalur B: Fallback jika tidak terikat di tugas utama, cari via team_members anggota
+  if (!katimId) {
+    const { rows: memberRows } = await pool.query(
+      `SELECT tm.katim_id 
+       FROM team_members mem 
+       JOIN teams tm ON tm.id = mem.team_id 
+       WHERE mem.user_id = $1`,
+      [updated.assigned_to]
+    );
+    katimId = memberRows[0]?.katim_id;
+  }
+
+  // Kirim notifikasi ke Katim jika ditemukan
   if (katimId) {
     await NotificationService.kirim(
       katimId,
       keputusan === 'disetujui' ? 'Subtugas diverifikasi final kasubag' : 'Subtugas dikembalikan kasubag',
-      `Subtugas '${updated.judul}' (tim Anda) telah ${keputusan} oleh kasubag.`
+      `Subtugas '${updated.judul}' (tim Anda) telah ${keputusan} oleh kasubag.` + (catatan ? ` Catatan: ${catatan}` : ''),
+      '/katim/verifikasi'
     );
   }
 
@@ -169,7 +188,6 @@ export async function antrianKatim(req, res) {
   try {
     const user = req.user;
 
-    // PERBAIKAN: Gunakan team_members untuk mencari tim dari assignee
     const { rows } = await pool.query(
       `SELECT s.*,
           json_build_object(
@@ -177,13 +195,13 @@ export async function antrianKatim(req, res) {
             'team', CASE WHEN t_tm.id IS NOT NULL THEN json_build_object('id', t_tm.id, 'nama_tim', t_tm.nama_tim, 'katim_id', t_tm.katim_id) ELSE NULL END
           ) AS tugas,
           json_build_object('id', a.id, 'name', a.name) AS assignee
-       FROM subtugas s
-       JOIN tugas t ON t.id = s.tugas_id
-       JOIN users a ON a.id = s.assigned_to
-       JOIN team_members a_mem ON a_mem.user_id = a.id
-       JOIN teams assignee_tm ON assignee_tm.id = a_mem.team_id
-       LEFT JOIN teams t_tm ON t_tm.id = t.team_id
-       WHERE assignee_tm.katim_id = $1 AND s.status = 'Menunggu Verifikasi Katim'`,
+        FROM subtugas s
+        JOIN tugas t ON t.id = s.tugas_id
+        JOIN users a ON a.id = s.assigned_to
+        JOIN team_members a_mem ON a_mem.user_id = a.id
+        JOIN teams assignee_tm ON assignee_tm.id = a_mem.team_id
+        LEFT JOIN teams t_tm ON t_tm.id = t.team_id
+        WHERE assignee_tm.katim_id = $1 AND s.status = 'Menunggu Verifikasi Katim'`,
       [user.id]
     );
 
@@ -218,11 +236,11 @@ export async function antrianKasubag(req, res) {
             'team', CASE WHEN t_tm.id IS NOT NULL THEN json_build_object('id', t_tm.id, 'nama_tim', t_tm.nama_tim, 'katim_id', t_tm.katim_id) ELSE NULL END
           ) AS tugas,
           json_build_object('id', a.id, 'name', a.name) AS assignee
-       FROM subtugas s
-       JOIN tugas t ON t.id = s.tugas_id
-       JOIN users a ON a.id = s.assigned_to
-       LEFT JOIN teams t_tm ON t_tm.id = t.team_id
-       WHERE s.status = 'Menunggu Verifikasi Kasubag'`
+        FROM subtugas s
+        JOIN tugas t ON t.id = s.tugas_id
+        JOIN users a ON a.id = s.assigned_to
+        LEFT JOIN teams t_tm ON t_tm.id = t.team_id
+        WHERE s.status = 'Menunggu Verifikasi Kasubag'`
     );
 
     for (const s of subtugas) {
@@ -248,10 +266,10 @@ export async function antrianKasubag(req, res) {
               'katim', json_build_object('id', k.id, 'name', k.name)
             )
           ELSE NULL END AS team
-       FROM tugas t
-       LEFT JOIN teams tm ON tm.id = t.team_id
-       LEFT JOIN users k ON k.id = tm.katim_id
-       WHERE t.status = 'Menunggu Verifikasi'`
+        FROM tugas t
+        LEFT JOIN teams tm ON tm.id = t.team_id
+        LEFT JOIN users k ON k.id = tm.katim_id
+        WHERE t.status = 'Menunggu Verifikasi'`
     );
 
     return res.json({ subtugas, tugas });
