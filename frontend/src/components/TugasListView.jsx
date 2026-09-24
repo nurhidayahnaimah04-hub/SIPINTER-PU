@@ -3,6 +3,7 @@ import api from '../lib/api'
 import { useAutoRefresh } from '../lib/useAutoRefresh'
 import { Link, useSearchParams } from 'react-router-dom'
 import { usePeriode } from '../context/PeriodeContext'
+import { useAuth } from '../context/AuthContext'
 import Modal from './Modal'
 import ProgressBar from './ProgressBar'
 import Loading from './Loading'
@@ -41,6 +42,7 @@ function groupTugasByKodeTim(tugasList) {
 
 export default function TugasListView({ basePath, canCreate, title, subtitle, groupByTeam }) {
   const { periode } = usePeriode()
+  const { user } = useAuth()
   const [searchParams, setSearchParams] = useSearchParams()
   const [tugasList, setTugasList] = useState(null)
   const [teams, setTeams] = useState([])
@@ -51,6 +53,9 @@ export default function TugasListView({ basePath, canCreate, title, subtitle, gr
   const [form, setForm] = useState({ judul: '', deskripsi: '', deadline: '', team_id: '' })
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+
+  // Anggota dan Katim selalu diperbolehkan membuat tugas mandiri
+  const allowCreate = canCreate ?? (user?.role === 'anggota' || user?.role === 'katim' || user?.role === 'kasubag')
 
   function load() {
     if (!periode.periode_id) return
@@ -71,7 +76,7 @@ export default function TugasListView({ basePath, canCreate, title, subtitle, gr
   }
 
   useAutoRefresh(load, [search, statusFilter, teamFilter, periode.periode_id, periode.semester])
-  useEffect(() => { if (canCreate || groupByTeam) api.get('/teams').then((res) => setTeams(res.data)) }, [canCreate, groupByTeam])
+  useEffect(() => { if (allowCreate || groupByTeam) api.get('/teams').then((res) => setTeams(res.data)) }, [allowCreate, groupByTeam])
 
   const groupedTugas = useMemo(() => {
     if (!groupByTeam || !tugasList) return null
@@ -92,7 +97,6 @@ export default function TugasListView({ basePath, canCreate, title, subtitle, gr
       setForm({ judul: '', deskripsi: '', deadline: '', team_id: '' })
       load()
     } catch (err) {
-      // KRUSIAL: Tampilkan pesan error asli dari backend
       setError(err.response?.data?.message || 'Gagal membuat tugas. Periksa kembali data.')
     } finally {
       setSaving(false)
@@ -106,7 +110,11 @@ export default function TugasListView({ basePath, canCreate, title, subtitle, gr
           <h1 className="text-xl font-semibold text-gray-900">{title}</h1>
           <p className="text-sm text-gray-500">{subtitle}</p>
         </div>
-        {canCreate && <button onClick={() => setOpen(true)} className="btn bg-pupr-blue-dark hover:bg-pupr-blue text-white transition-colors disabled:opacity-60"><Plus size={16} /> Buat Tugas</button>}
+        {allowCreate && (
+          <button onClick={() => setOpen(true)} className="btn bg-pupr-blue-dark hover:bg-pupr-blue text-white transition-colors disabled:opacity-60">
+            <Plus size={16} /> Buat Tugas
+          </button>
+        )}
       </div>
 
       <div className="flex flex-col sm:flex-row sm:flex-wrap gap-3 mb-4">
@@ -141,19 +149,35 @@ export default function TugasListView({ basePath, canCreate, title, subtitle, gr
                 <span className="text-xs text-gray-400">({group.items.length} tugas)</span>
               </div>
               <div className="grid md:grid-cols-2 gap-4">
-                {group.items.map((t) => <TugasCard key={t.id} t={t} basePath={basePath} canManage={canCreate} onChanged={load} />)}
+                {group.items.map((t) => (
+                  <TugasCard 
+                    key={t.id} 
+                    t={t} 
+                    basePath={basePath} 
+                    canManage={t.created_by === user?.id || user?.role === 'kasubag' || user?.role === 'katim'} 
+                    onChanged={load} 
+                  />
+                ))}
               </div>
             </div>
           ))}
         </div>
       ) : (
         <div className="grid md:grid-cols-2 gap-4">
-          {tugasList.map((t) => <TugasCard key={t.id} t={t} basePath={basePath} canManage={canCreate} onChanged={load} />)}
+          {tugasList.map((t) => (
+            <TugasCard 
+              key={t.id} 
+              t={t} 
+              basePath={basePath} 
+              canManage={t.created_by === user?.id || user?.role === 'kasubag' || user?.role === 'katim'} 
+              onChanged={load} 
+            />
+          ))}
         </div>
       )}
 
-      {canCreate && (
-        <Modal   open={open} onClose={() => setOpen(false)} title={ <span className="inline-block -mx-6 -mt-6 mb-2 px-6 py-4 bg-pupr-yellow text-pupr-blue-dark font-semibold rounded-t-xl w-[calc(100%+3rem)]"> Buat Tugas Baru </span>} wide>
+      {allowCreate && (
+        <Modal open={open} onClose={() => setOpen(false)} title={<span className="inline-block -mx-6 -mt-6 mb-2 px-6 py-4 bg-pupr-yellow text-pupr-blue-dark font-semibold rounded-t-xl w-[calc(100%+3rem)]"> Buat Tugas Baru </span>} wide>
           <form onSubmit={handleCreate} className="space-y-4">
             {error && <div className="bg-red-50 text-red-700 text-sm px-3 py-2 rounded-lg">{error}</div>}
             <p className="text-xs text-gray-500 bg-gray-50 rounded-lg px-3 py-2">
@@ -172,14 +196,21 @@ export default function TugasListView({ basePath, canCreate, title, subtitle, gr
               <label className="label">Deadline (opsional)</label>
               <input type="date" className="input" value={form.deadline} onChange={(e) => setForm({ ...form, deadline: e.target.value })} />
             </div>
-            <div>
-              <label className="label">Assign ke Tim (Katim)</label>
-              <select className="input" value={form.team_id} onChange={(e) => setForm({ ...form, team_id: e.target.value })}>
-                <option value="">Tugas Umum (Lintas Tim)</option>
-                {teams.map((t) => <option key={t.id} value={t.id}>{t.nama_tim} {t.kode_tim ? `(${t.kode_tim})` : ''} — Katim: {t.katim?.name}</option>)}
-              </select>
-            </div>
-            <button className="w-full py-2.5 rounded-lg font-medium bg-pupr-blue-dark hover:bg-pupr-blue text-white transition-colors disabled:opacity-60" disabled={saving}>{saving ? 'Menyimpan...' : 'Buat Tugas'}</button>
+
+            {/* Opsi Tim hanya ditampilkan untuk Kasubag. Untuk Anggota/Katim, otomatis terkunci di backend */}
+            {user?.role === 'kasubag' && (
+              <div>
+                <label className="label">Assign ke Tim (Katim)</label>
+                <select className="input" value={form.team_id} onChange={(e) => setForm({ ...form, team_id: e.target.value })}>
+                  <option value="">Tugas Umum (Lintas Tim)</option>
+                  {teams.map((t) => <option key={t.id} value={t.id}>{t.nama_tim} {t.kode_tim ? `(${t.kode_tim})` : ''} — Katim: {t.katim?.name}</option>)}
+                </select>
+              </div>
+            )}
+
+            <button className="w-full py-2.5 rounded-lg font-medium bg-pupr-blue-dark hover:bg-pupr-blue text-white transition-colors disabled:opacity-60" disabled={saving}>
+              {saving ? 'Menyimpan...' : 'Buat Tugas'}
+            </button>
           </form>
         </Modal>
       )}
