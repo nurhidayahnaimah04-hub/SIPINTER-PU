@@ -31,12 +31,22 @@ export async function index(req, res) {
     }
   }
 
+  // LOGIKA AKSEBILITAS INDEX TUGAS:
+  // - Katim: Melihat tugas timnya ATAU tugas umum (team_id IS NULL)
+  // - Anggota: Melihat tugas yang ia menjadi pelaksana subtugas ATAU tugas yang berada di tim tempatnya bernaung
   if (user.role === 'katim') {
     params.push(user.id);
     conditions.push(`(t.team_id IS NULL OR EXISTS (SELECT 1 FROM teams tm WHERE tm.id = t.team_id AND tm.katim_id = $${params.length}))`);
   } else if (user.role === 'anggota') {
     params.push(user.id);
-    conditions.push(`EXISTS (SELECT 1 FROM subtugas s3 WHERE s3.tugas_id = t.id AND s3.assigned_to = $${params.length})`);
+    conditions.push(`(
+      EXISTS (SELECT 1 FROM subtugas s3 WHERE s3.tugas_id = t.id AND s3.assigned_to = $${params.length})
+      OR EXISTS (
+        SELECT 1 FROM team_members tm_mem 
+        WHERE tm_mem.team_id = t.team_id AND tm_mem.user_id = $${params.length}
+      )
+      OR t.created_by = $${params.length}
+    )`);
   }
 
   if (req.query.status) {
@@ -70,7 +80,7 @@ export async function index(req, res) {
             'katim', json_build_object('id', k.id, 'name', k.name)
           )
         ELSE NULL END AS team,
-        json_build_object('id', c.id, 'name', c.name) AS creator,
+        json_build_object('id', c.id, 'name', c.name, 'role', c.role) AS creator,
         json_build_object('id', p.id, 'tahun', p.tahun, 'status', p.status) AS periode
      FROM tugas t
      LEFT JOIN teams tm ON tm.id = t.team_id
@@ -114,18 +124,64 @@ export async function store(req, res) {
   }
 
   try {
+    const userRole = req.user.role;
+    let finalTeamId = team_id || null;
+
+    // PENYEMPURNAAN LOGIKA TIM PEMBUAT TUGAS:
+    // Jika Dibuat oleh Anggota atau Katim, kunci team_id secara otomatis berdasarkan tim mereka bernaung
+    if (userRole === 'anggota') {
+      const { rows: userTeamRows } = await pool.query(
+        `SELECT team_id FROM team_members WHERE user_id = $1 LIMIT 1`,
+        [req.user.id]
+      );
+      if (userTeamRows.length > 0) {
+        finalTeamId = userTeamRows[0].team_id;
+      }
+    } else if (userRole === 'katim') {
+      const { rows: katimTeamRows } = await pool.query(
+        `SELECT id FROM teams WHERE katim_id = $1 LIMIT 1`,
+        [req.user.id]
+      );
+      if (katimTeamRows.length > 0) {
+        finalTeamId = katimTeamRows[0].id;
+      }
+    }
+
     const { rows } = await pool.query(
       `INSERT INTO tugas (judul, deskripsi, periode_id, deadline, team_id, created_by, status, progress)
        VALUES ($1,$2,$3,$4,$5,$6,'Belum Dimulai',0) RETURNING *`,
-      [judul, deskripsi || null, finalPeriodeId, deadline || null, team_id || null, req.user.id]
+      [judul, deskripsi || null, finalPeriodeId, deadline || null, finalTeamId, req.user.id]
     );
     const tugas = rows[0];
 
+    // ALUR NOTIFIKASI OTOMATIS SAAT TUGAS DIBUAT:
     if (tugas.team_id) {
       const { rows: teamRows } = await pool.query(`SELECT * FROM teams WHERE id = $1`, [tugas.team_id]);
       const team = teamRows[0];
 
-      if (team?.katim_id) {
+      // 1. Notifikasi ke Katim (Jika tugas dibuat oleh Anggota)
+      if (userRole === 'anggota' && team?.katim_id) {
+        await NotificationService.kirim(
+          team.katim_id,
+          'Tugas Mandiri Baru dari Anggota',
+          `${req.user.name} membuat tugas mandiri baru: "${tugas.judul}"`,
+          `/katim/tugas/${tugas.id}`
+        );
+      }
+
+      // 2. Notifikasi ke Kasubag (Jika tugas dibuat oleh Anggota atau Katim)
+      if (userRole === 'anggota' || userRole === 'katim') {
+        const { rows: kasubagRows } = await pool.query(`SELECT id FROM users WHERE role = 'kasubag'`);
+        for (const ksb of kasubagRows) {
+          await NotificationService.kirim(
+            ksb.id,
+            `Tugas Baru dari ${userRole === 'anggota' ? 'Anggota' : 'Katim'}`,
+            `${req.user.name} (${team?.nama_tim || 'Tim'}) membuat tugas baru: "${tugas.judul}"`,
+            `/kasubag/tugas/${tugas.id}`
+          );
+        }
+      } else if (userRole === 'kasubag' && team?.katim_id) {
+        // Notifikasi standar Kasubag -> Katim
         await NotificationService.kirim(
           team.katim_id,
           'Tugas baru diterima',
@@ -158,7 +214,7 @@ export async function show(req, res) {
             ), '[]'::json)
           )
         ELSE NULL END AS team,
-        json_build_object('id', c.id, 'name', c.name) AS creator,
+        json_build_object('id', c.id, 'name', c.name, 'role', c.role) AS creator,
         CASE WHEN vf.id IS NOT NULL THEN json_build_object('id', vf.id, 'name', vf.name) ELSE NULL END AS verifikator
      FROM tugas t
      LEFT JOIN teams tm ON tm.id = t.team_id
@@ -174,9 +230,7 @@ export async function show(req, res) {
     return res.status(404).json({ message: 'Tugas tidak ditemukan.' });
   }
 
-  // BACA SIAPA YANG SEDANG LOGIN: Jika Katim, berikan juga daftar anggota timnya
-  // agar Katim bisa assign anggotanya sendiri di Tugas Umum
-  // BACA SIAPA YANG SEDANG LOGIN: Jika Katim, berikan juga daftar anggota tim + Katim sendiri
+  // Jika Katim, berikan daftar anggota tim + Katim sendiri
   if (req.user.role === 'katim') {
     const { rows: myTeamRows } = await pool.query(
       `SELECT COALESCE(
@@ -212,7 +266,6 @@ export async function show(req, res) {
   );
 
   for (const s of subtugasRows) {
-    // ambil lampiran yang nempel langsung di subtugas (upload dari Katim/Kasubag)
     const { rows: subFileRows } = await pool.query(
       `SELECT * FROM subtugas_files WHERE subtugas_id = $1`,
       [s.id]
@@ -255,6 +308,15 @@ export async function update(req, res) {
   const tugasId = req.params.tugas;
   const { judul, deskripsi, deadline } = req.body || {};
 
+  const { rows: existingRows } = await pool.query(`SELECT * FROM tugas WHERE id = $1`, [tugasId]);
+  if (existingRows.length === 0) return res.status(404).json({ message: 'Tugas tidak ditemukan.' });
+  const existingTugas = existingRows[0];
+
+  // BATASAN EDIT: Anggota hanya bisa mengedit tugas yang ia buat sendiri
+  if (req.user.role === 'anggota' && existingTugas.created_by !== req.user.id) {
+    return res.status(403).json({ message: 'Anda tidak memiliki akses untuk mengubah tugas ini.' });
+  }
+
   const fields = {};
   if (typeof judul !== 'undefined') fields.judul = judul;
   if (typeof deskripsi !== 'undefined') fields.deskripsi = deskripsi || null;
@@ -262,9 +324,7 @@ export async function update(req, res) {
 
   const keys = Object.keys(fields);
   if (keys.length === 0) {
-    const { rows } = await pool.query(`SELECT * FROM tugas WHERE id = $1`, [tugasId]);
-    if (rows.length === 0) return res.status(404).json({ message: 'Tugas tidak ditemukan.' });
-    return res.json(rows[0]);
+    return res.json(existingTugas);
   }
 
   const setClauses = keys.map((k, i) => `${k} = $${i + 1}`);
@@ -275,15 +335,24 @@ export async function update(req, res) {
     `UPDATE tugas SET ${setClauses.join(', ')}, updated_at = now() WHERE id = $${values.length} RETURNING *`,
     values
   );
-  if (rows.length === 0) return res.status(404).json({ message: 'Tugas tidak ditemukan.' });
-
+  
   await ActivityLog.catat(req.user.id, `mengubah tugas ${rows[0].judul}`, 'tugas', rows[0].id);
 
   return res.json(rows[0]);
 }
 
 export async function destroy(req, res) {
-  await pool.query(`DELETE FROM tugas WHERE id = $1`, [req.params.tugas]);
+  const tugasId = req.params.tugas;
+  const { rows } = await pool.query(`SELECT * FROM tugas WHERE id = $1`, [tugasId]);
+  if (rows.length === 0) return res.status(404).json({ message: 'Tugas tidak ditemukan.' });
+  const tugas = rows[0];
+
+  // BATASAN HAPUS: Anggota hanya bisa menghapus tugas yang ia buat sendiri
+  if (req.user.role === 'anggota' && tugas.created_by !== req.user.id) {
+    return res.status(403).json({ message: 'Anda tidak memiliki akses untuk menghapus tugas ini.' });
+  }
+
+  await pool.query(`DELETE FROM tugas WHERE id = $1`, [tugasId]);
   return res.json({ message: 'Tugas dihapus.' });
 }
 

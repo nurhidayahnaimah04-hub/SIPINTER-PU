@@ -29,8 +29,8 @@ const NAV = {
   ],
   katim: [
     { to: '/katim', label: 'Dashboard', icon: LayoutDashboard, end: true },
-    { to: '/katim/subtugas', label: 'Subtugas Saya', icon: ClipboardList }, // MENU BARU UNTUK KATIM
-    { to: '/katim/tugas', label: 'Tugas dari Kasubag', icon: ClipboardList },
+    { to: '/katim/subtugas', label: 'Subtugas Saya', icon: ClipboardList },
+    { to: '/katim/tugas', label: 'Daftar Tugas', icon: ClipboardList },
     { to: '/katim/verifikasi', label: 'Verifikasi Subtugas', icon: CheckSquare },
     { to: '/katim/team', label: 'Tim Saya', icon: Users },
     { to: '/katim/notifications', label: 'Notifikasi', icon: Bell },
@@ -38,6 +38,7 @@ const NAV = {
   anggota: [
     { to: '/anggota', label: 'Dashboard', icon: LayoutDashboard, end: true },
     { to: '/anggota/subtugas', label: 'Subtugas Saya', icon: ClipboardList },
+    { to: '/anggota/tugas', label: 'Daftar Tugas', icon: ClipboardList }, // MENU BARU UNTUK ANGGOTA
     { to: '/anggota/history', label: 'Riwayat', icon: History },
     { to: '/anggota/notifications', label: 'Notifikasi', icon: Bell },
   ],

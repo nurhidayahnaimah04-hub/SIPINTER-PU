@@ -78,8 +78,10 @@ export default function App() {
       <Route path="/katim/notifications" element={<Protected roles={['katim']}><KatimNotifications /></Protected>} />
       <Route path="/katim/profile" element={<Protected roles={['katim']}><Profile /></Protected>} />
 
-      {/* Anggota */}
+      {/* Anggota (Ditambahkan rute /anggota/tugas agar anggota punya daftar tugas utama) */}
       <Route path="/anggota" element={<Protected roles={['anggota']}><AnggotaDashboard /></Protected>} />
+      <Route path="/anggota/tugas" element={<Protected roles={['anggota']}><KatimTugas /></Protected>} />
+      <Route path="/anggota/tugas/:id" element={<Protected roles={['anggota']}><KatimTugasDetail /></Protected>} />
       <Route path="/anggota/subtugas" element={<Protected roles={['anggota']}><AnggotaSubtugas /></Protected>} />
       <Route path="/anggota/subtugas/:id" element={<Protected roles={['anggota']}><AnggotaSubtugasDetail /></Protected>} />
       <Route path="/anggota/history" element={<Protected roles={['anggota']}><AnggotaHistory /></Protected>} />
