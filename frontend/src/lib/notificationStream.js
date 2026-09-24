@@ -20,7 +20,13 @@ export function useNotificationStream(onNotification) {
       }
     }
 
-    // Browser otomatis reconnect kalau koneksi putus, tidak perlu logic tambahan.
+    es.onerror = (err) => {
+      // Jika server mengembalikan HTML (404/500/401), tutup eventSource agar tidak spam reconnect
+      if (es.readyState === EventSource.CLOSED || es.readyState === EventSource.CONNECTING) {
+        // Tutup koneksi secara aman jika error response bertipe non-event-stream
+        es.close()
+      }
+    }
 
     return () => es.close()
   }, [])

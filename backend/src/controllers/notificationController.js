@@ -13,13 +13,13 @@ export async function index(req, res) {
     [req.user.id]
   );
 
-const { rows } = await pool.query(
-  `SELECT * FROM notifications
-   WHERE user_id = $1 AND created_at >= now() - interval '30 days'
-   ORDER BY created_at DESC, id DESC
-   LIMIT $2 OFFSET $3`,
-  [req.user.id, perPage, offset]
-);
+  const { rows } = await pool.query(
+    `SELECT * FROM notifications
+     WHERE user_id = $1 AND created_at >= now() - interval '30 days'
+     ORDER BY created_at DESC, id DESC
+     LIMIT $2 OFFSET $3`,
+    [req.user.id, perPage, offset]
+  );
 
   return res.json(
     buildPaginationResponse({
@@ -63,17 +63,31 @@ export async function markAllRead(req, res) {
 }
 
 export function stream(req, res) {
+  // Set header SSE dengan tambahan 'X-Accel-Buffering: no' agar tidak tertahan proxy
   res.writeHead(200, {
     'Content-Type': 'text/event-stream',
-    'Cache-Control': 'no-cache',
-    Connection: 'keep-alive',
+    'Cache-Control': 'no-cache, no-transform',
+    'Connection': 'keep-alive',
+    'X-Accel-Buffering': 'no',
   });
+
+  // Flush header jika method flushHeaders tersedia
+  if (typeof res.flushHeaders === 'function') {
+    res.flushHeaders();
+  }
+
   res.write(': connected\n\n');
 
   NotificationHub.subscribe(req.user.id, res);
 
   // Ping tiap 25 detik supaya koneksi tidak diputus proxy/browser karena idle.
-  const keepAlive = setInterval(() => res.write(': ping\n\n'), 25000);
+  const keepAlive = setInterval(() => {
+    try {
+      res.write(': ping\n\n');
+    } catch {
+      // Abaikan jika koneksi sudah terputus
+    }
+  }, 25000);
 
   req.on('close', () => {
     clearInterval(keepAlive);

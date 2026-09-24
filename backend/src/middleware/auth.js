@@ -16,6 +16,10 @@ export async function authenticate(req, res, next) {
   }
 
   if (!token) {
+    // Jika endpoint yang diakses adalah SSE stream, set header text/event-stream sebelum return
+    if (req.path.includes('/notifications/stream')) {
+      res.setHeader('Content-Type', 'text/event-stream');
+    }
     return res.status(401).json({ message: 'Unauthenticated.' });
   }
 
@@ -29,6 +33,10 @@ export async function authenticate(req, res, next) {
   );
 
   if (rows.length === 0) {
+    // Jika token tidak valid pada endpoint SSE stream, set header text/event-stream
+    if (req.path.includes('/notifications/stream')) {
+      res.setHeader('Content-Type', 'text/event-stream');
+    }
     return res.status(401).json({ message: 'Unauthenticated.' });
   }
 
