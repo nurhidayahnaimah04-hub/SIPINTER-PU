@@ -58,12 +58,15 @@ router.delete('/users/:user/permanent', role('kabalai', 'kasubag'), h(UserContro
 // katim & kasubag boleh melihat daftar user (untuk pilih anggota / assign)
 router.get('/users-lite', role('kabalai', 'kasubag', 'katim'), h(UserController.index));
 
-// Tugas (Kasubag -> Katim)
+// Tugas (Kasubag, Katim, Anggota)
 router.get('/tugas', h(TugasController.index));
 router.get('/tugas/:tugas', h(TugasController.show));
-router.post('/tugas', role('kasubag'), h(TugasController.store));
-router.put('/tugas/:tugas', role('kasubag'), h(TugasController.update));
-router.delete('/tugas/:tugas', role('kasubag'), h(TugasController.destroy));
+
+// PERBAIKAN FITUR BARU: Mengizinkan katim dan anggota membuat, mengedit, serta menghapus tugas mandiri
+router.post('/tugas', role('kasubag', 'katim', 'anggota'), h(TugasController.store));
+router.put('/tugas/:tugas', role('kasubag', 'katim', 'anggota'), h(TugasController.update));
+router.delete('/tugas/:tugas', role('kasubag', 'katim', 'anggota'), h(TugasController.destroy));
+
 router.post('/tugas/:tugas/verifikasi', role('kasubag'), h(TugasController.verifikasi));
 router.post('/tugas/:tugas/duplicate', role('kasubag'), h(TugasController.duplicate));
 router.post('/tugas/:tugas/lampiran', uploadLampiranTugas.single('file'), h(TugasController.uploadLampiran));
