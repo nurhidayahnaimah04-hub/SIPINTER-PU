@@ -82,10 +82,10 @@ export default function DashboardLayout({ children }) {
     <div className="min-h-screen flex">
       <aside className={`fixed inset-y-0 left-0 z-30 w-64 bg-pupr-blue text-white flex flex-col transform transition-transform ${mobileOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`}>
         <div className="h-16 px-6 border-b border-white/10 flex items-center gap-3 flex-shrink-0">
-          <img src="/logo-sipinter.jpg" alt="Logo Kementerian PU" className="w-9 h-9 rounded-lg object-cover flex-shrink-0" />
+          <img src="logo-sipinter.jpg" alt="Logo Kementerian PU" className="w-9 h-9 rounded-lg object-cover flex-shrink-0" />
           <div className="min-w-0">
             <p className="font-semibold text-sm leading-tight truncate">SIPINTER</p>
-            <p className="text-[11px] text-pupr-yellow leading-tight truncate">Bapekom PU Wilayah I</p>
+            <p className="text-[11px] text-pupr-yellow leading-tight truncate">Bapekom PU Wilayah I Medan</p>
           </div>
         </div>
         <nav className="flex-1 px-4 py-5 space-y-2 overflow-y-auto">
