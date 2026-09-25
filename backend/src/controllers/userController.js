@@ -15,7 +15,9 @@ function sanitize(user) {
 export async function index(req, res) {
   const { search, role } = req.query;
   const page = Math.max(Number(req.query.page || 1), 1);
-  const perPage = 20;
+  
+  // PERBAIKAN: Gunakan limit dari query jika ada, atau default 1000 agar seluruh user tampil
+  const perPage = Number(req.query.limit) || 1000;
   const offset = (page - 1) * perPage;
 
   const conditions = [];
@@ -140,9 +142,6 @@ export async function destroyPermanent(req, res) {
   const { rows: userRows } = await pool.query(`SELECT * FROM users WHERE id = $1`, [userId]);
   if (userRows.length === 0) return res.status(404).json({ message: 'User tidak ditemukan.' });
 
-  // Skema DB pakai ON DELETE CASCADE untuk katim_id, assigned_to, created_by --
-  // kalau langsung dihapus, tim/tugas/subtugas milik user ini ikut lenyap.
-  // Jadi hapus permanen ditolak dulu selama masih ada data yang bergantung padanya.
   const { rows: teamRows } = await pool.query(`SELECT nama_tim FROM teams WHERE katim_id = $1`, [userId]);
   if (teamRows.length > 0) {
     return res.status(422).json({
