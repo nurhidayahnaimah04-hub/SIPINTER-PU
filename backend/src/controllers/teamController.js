@@ -63,7 +63,7 @@ export async function store(req, res) {
     for (const uid of anggota_ids) {
       await pool.query(
         `INSERT INTO team_members (team_id, user_id) VALUES ($1,$2) ON CONFLICT DO NOTHING`,
-        [team.id, uid]
+        [team.id, Number(uid)]
       );
     }
   }
@@ -74,13 +74,14 @@ export async function store(req, res) {
 }
 
 export async function update(req, res) {
-  const teamId = req.params.team;
+  // PERBAIKAN: Membaca req.params.id atau req.params.team agar cocok dengan rute /teams/:id
+  const teamId = req.params.id || req.params.team;
   const { nama_tim, kode_tim, katim_id, anggota_ids } = req.body || {};
 
   const fields = {};
   if (typeof nama_tim !== 'undefined') fields.nama_tim = nama_tim;
   if (typeof kode_tim !== 'undefined') fields.kode_tim = kode_tim;
-  if (typeof katim_id !== 'undefined') fields.katim_id = katim_id;
+  if (typeof katim_id !== 'undefined') fields.katim_id = Number(katim_id);
 
   const keys = Object.keys(fields);
   if (keys.length > 0) {
@@ -94,11 +95,14 @@ export async function update(req, res) {
   }
 
   if (typeof anggota_ids !== 'undefined' && Array.isArray(anggota_ids)) {
+    // Hapus seluruh anggota lama tim ini
     await pool.query(`DELETE FROM team_members WHERE team_id = $1`, [teamId]);
+    
+    // Masukkan kembali seluruh anggota baru yang dipilih
     for (const uid of anggota_ids) {
       await pool.query(
         `INSERT INTO team_members (team_id, user_id) VALUES ($1,$2) ON CONFLICT DO NOTHING`,
-        [teamId, uid]
+        [teamId, Number(uid)]
       );
     }
   }
@@ -108,10 +112,13 @@ export async function update(req, res) {
     return res.status(404).json({ message: 'Tim tidak ditemukan.' });
   }
 
+  await ActivityLog.catat(req.user.id, `mengubah data tim ${team.nama_tim}`, 'teams', team.id);
+
   return res.json(team);
 }
 
 export async function destroy(req, res) {
-  await pool.query(`DELETE FROM teams WHERE id = $1`, [req.params.team]);
+  const teamId = req.params.id || req.params.team;
+  await pool.query(`DELETE FROM teams WHERE id = $1`, [teamId]);
   return res.json({ message: 'Tim dihapus.' });
 }
