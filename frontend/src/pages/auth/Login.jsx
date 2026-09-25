@@ -39,7 +39,7 @@ export default function Login() {
 
         .panel-left-wrapper {
           flex: 1.3;
-          background: #07142E;
+          background: #0A3D7A;
           display: flex;
           flex-direction: column;
           justify-content: space-between;
@@ -205,7 +205,7 @@ export default function Login() {
             <div style={{ marginBottom: '32px', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', marginBottom: '16px' }}>
                 <img src="/logo-sipinter.png" alt="SIPINTER Icon" style={{ width: '28px', height: '28px', objectFit: 'contain' }} />
-                <span style={{ fontWeight: 800, fontSize: '16px', color: '#07142E', letterSpacing: '0.05em' }}>SIPINTER</span>
+                <span style={{ fontWeight: 800, fontSize: '16px', color: '#0A3D7A', letterSpacing: '0.05em' }}>SIPINTER</span>
               </div>
               <h2 className="form-title-mobile" style={{ margin: '0 0 10px 0', fontWeight: 800, fontSize: '30px', color: '#07142E', letterSpacing: '-0.01em' }}>Selamat datang</h2>
               <p className="form-desc-mobile" style={{ margin: 0, fontSize: '15px', color: '#64748B', lineHeight: 1.5 }}>Masuk untuk melanjutkan ke dashboard SIPINTER.</p>
@@ -221,7 +221,7 @@ export default function Login() {
             {/* Form Utama */}
             <form onSubmit={handleSubmit} style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: '24px' }}>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '9px', textAlign: 'left' }}>
-                <label htmlFor="email" style={{ fontSize: '14.5px', fontWeight: 700, color: '#1E293B' }}>Email</label>
+                <label htmlFor="email" style={{ fontSize: '14.5px', fontWeight: 700, color: '#0A3D7A' }}>Email</label>
                 <input
                   id="email"
                   type="email"
@@ -234,7 +234,7 @@ export default function Login() {
               </div>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: '9px', textAlign: 'left' }}>
-                <label htmlFor="password" style={{ fontSize: '14.5px', fontWeight: 700, color: '#1E293B' }}>Password</label>
+                <label htmlFor="password" style={{ fontSize: '14.5px', fontWeight: 700, color: '#0A3D7A' }}>Password</label>
                 <div style={{ position: 'relative' }}>
                   <input
                     id="password"
@@ -260,7 +260,7 @@ export default function Login() {
               <button
                 type="submit"
                 disabled={loading}
-                style={{ height: '52px', border: 'none', borderRadius: '10px', backgroundColor: '#F2A90A', color: '#07142E', fontWeight: 800, fontSize: '16.5px', cursor: 'pointer', marginTop: '6px', opacity: loading ? 0.7 : 1, boxShadow: '0 4px 12px rgba(242, 169, 10, 0.25)' }}
+                style={{ height: '52px', border: 'none', borderRadius: '10px', backgroundColor: '#F2A90A', color: '#000000ff', fontWeight: 800, fontSize: '16.5px', cursor: 'pointer', marginTop: '6px', opacity: loading ? 0.7 : 1, boxShadow: '0 4px 12px rgba(242, 169, 10, 0.25)' }}
               >
                 {loading ? 'Memproses...' : 'Masuk'}
               </button>
