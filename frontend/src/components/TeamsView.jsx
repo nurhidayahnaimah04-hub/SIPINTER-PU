@@ -22,8 +22,8 @@ export default function TeamsView() {
 
   useEffect(() => {
     load()
-    api.get('/users', { params: { role: 'katim' } }).then((res) => setKatimList(res.data.data))
-    api.get('/users', { params: { role: 'anggota' } }).then((res) => setAnggotaList(res.data.data))
+    api.get('/users', { params: { role: 'katim', limit: 1000 } }).then((res) => setKatimList(res.data.data))
+    api.get('/users', { params: { role: 'anggota', limit: 1000 } }).then((res) => setAnggotaList(res.data.data))
   }, [])
 
   function openCreate() {
@@ -34,20 +34,41 @@ export default function TeamsView() {
 
   function openEdit(t) {
     setEditing(t)
-    setForm({ nama_tim: t.nama_tim, kode_tim: t.kode_tim || '', katim_id: t.katim_id, anggota_ids: t.members?.map((m) => m.id) || [] })
+    // PERBAIKAN: Pastikan ID katim dan seluruh ID anggota dikonversi ke Number secara konsisten
+    setForm({
+      nama_tim: t.nama_tim,
+      kode_tim: t.kode_tim || '',
+      katim_id: t.katim_id ? Number(t.katim_id) : '',
+      anggota_ids: t.members ? t.members.map((m) => Number(m.id)) : []
+    })
     setOpen(true)
   }
 
+  // PERBAIKAN: Konversi ID ke Number saat toggle agar pencocokan array presisi
   function toggleMember(id) {
-    setForm((f) => ({ ...f, anggota_ids: f.anggota_ids.includes(id) ? f.anggota_ids.filter((x) => x !== id) : [...f.anggota_ids, id] }))
+    const targetId = Number(id)
+    setForm((f) => {
+      const current = f.anggota_ids.map((x) => Number(x))
+      const exists = current.includes(targetId)
+      return {
+        ...f,
+        anggota_ids: exists ? current.filter((x) => x !== targetId) : [...current, targetId]
+      }
+    })
   }
 
   async function handleSubmit(e) {
     e.preventDefault()
     setSaving(true)
     try {
-      if (editing) await api.put(`/teams/${editing.id}`, form)
-      else await api.post('/teams', form)
+      const payload = {
+        ...form,
+        katim_id: Number(form.katim_id),
+        anggota_ids: form.anggota_ids.map((id) => Number(id))
+      }
+
+      if (editing) await api.put(`/teams/${editing.id}`, payload)
+      else await api.post('/teams', payload)
       setOpen(false)
       load()
     } finally {
@@ -130,12 +151,15 @@ export default function TeamsView() {
           <div>
             <label className="label">Anggota Tim</label>
             <div className="border border-gray-200 rounded-lg max-h-48 overflow-y-auto p-2 space-y-1">
-              {anggotaList.map((a) => (
-                <label key={a.id} className="flex items-center gap-2 text-sm px-2 py-1.5 rounded hover:bg-gray-50 cursor-pointer">
-                  <input type="checkbox" checked={form.anggota_ids.includes(a.id)} onChange={() => toggleMember(a.id)} />
-                  {a.name}
-                </label>
-              ))}
+              {anggotaList.map((a) => {
+                const isChecked = form.anggota_ids.map((id) => Number(id)).includes(Number(a.id))
+                return (
+                  <label key={a.id} className="flex items-center gap-2 text-sm px-2 py-1.5 rounded hover:bg-gray-50 cursor-pointer">
+                    <input type="checkbox" checked={isChecked} onChange={() => toggleMember(a.id)} />
+                    {a.name}
+                  </label>
+                )
+              })}
             </div>
           </div>
           <button className="btn bg-pupr-blue-dark hover:bg-pupr-blue text-white transition-colors disabled:opacity-60 w-full" disabled={saving}>{saving ? 'Menyimpan...' : editing ? 'Simpan Perubahan' : 'Buat Tim'}</button>
