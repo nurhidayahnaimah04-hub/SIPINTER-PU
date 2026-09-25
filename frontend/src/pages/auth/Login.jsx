@@ -156,7 +156,7 @@ export default function Login() {
         <div className="panel-left-wrapper">
 
           {/* Foto Gedung Background */}
-          <div style={{ position: 'absolute', top: '-10px', right: '-10px', bottom: '-10px', left: '-10px', backgroundImage: 'url(/gedung.jpeg)', backgroundSize: 'cover', backgroundPosition: 'center', opacity: 0.25, filter: 'grayscale(100%) blur(2px)', pointerEvents: 'none', zIndex: 1 }} />
+          <div style={{ position: 'absolute', top: '-10px', right: '-10px', bottom: '-10px', left: '-10px', backgroundImage: 'url(/gedung.jpeg)', backgroundSize: 'cover', backgroundPosition: 'center', opacity: 60, filter: 'grayscale(100%) blur(2px)', pointerEvents: 'none', zIndex: 1 }} />
 
           {/* Gradient Darkener */}
           <div style={{ position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, background: 'linear-gradient(180deg, rgba(7, 20, 46, 0.88) 0%, rgba(7, 20, 46, 0.96) 100%)', pointerEvents: 'none', zIndex: 2 }} />
