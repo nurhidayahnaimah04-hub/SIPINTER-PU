@@ -26,7 +26,11 @@ export default function UserManagementView() {
   const [deleting, setDeleting] = useState(false)
   const [deleteError, setDeleteError] = useState('')
 
-  function load() { api.get('/users', { params: { search, role: roleFilter } }).then((res) => setUsers(res.data.data)) }
+  // PERBAIKAN: Tambahkan limit: 1000 agar backend mengembalikan seluruh daftar user tanpa terpotong
+  function load() { 
+    api.get('/users', { params: { search, role: roleFilter, limit: 1000 } })
+       .then((res) => setUsers(res.data.data)) 
+  }
 
   useEffect(() => { load() }, [search, roleFilter])
 
@@ -253,7 +257,7 @@ export default function UserManagementView() {
             </p>
           </div>
           <div className="flex justify-end gap-2">
-            <button type="button" className="btn btn-secondary" onClick={() => setDeleteTarget(null)} disabled={deleting}>
+            <button type="button" className="btn btn-secondary" onClick={() => setDeleteTarget(null)} disabled={deactivating}>
               Batal
             </button>
             <button type="button" className="btn btn-danger" onClick={handleDelete} disabled={deleting}>
