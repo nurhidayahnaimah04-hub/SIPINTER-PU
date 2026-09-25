@@ -74,9 +74,9 @@ export default function Login() {
         </div>
       </div>
 
-      {/* PANEL KANAN: Form Login (Diatur Rata Tengah Sempurna) */}
-      <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '60px 80px', minWidth: '460px', background: '#FFFFFF' }}>
-        <div style={{ width: '100%', maxWidth: '440px', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlignment: 'center' }}>
+      {/* PANEL KANAN: Form Login (Hanya Diubah Rata Tengah) */}
+      <div style={{ flex: 1, display: 'flex', alignItems: 'center', justify: 'center', padding: '60px 80px', minWidth: '460px', background: '#FFFFFF' }}>
+        <div style={{ width: '100%', maxWidth: '440px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
 
           {/* Header Form (Rata Tengah) */}
           <div style={{ marginBottom: '36px', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
