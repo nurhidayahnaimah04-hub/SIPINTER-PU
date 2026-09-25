@@ -1,45 +1,47 @@
-import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext.jsx';
+import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { useAuth } from '../context/AuthContext'
+import { Eye, EyeOff } from 'lucide-react'
 
 export default function Login() {
-  const { login } = useAuth();
-  const navigate = useNavigate();
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
-  const [error, setError] = useState('');
-  const [loading, setLoading] = useState(false);
+  const { login } = useAuth()
+  const navigate = useNavigate()
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
+  const [error, setError] = useState('')
+  const [loading, setLoading] = useState(false)
 
   async function handleSubmit(e) {
-    e.preventDefault();
-    setError('');
-    setLoading(true);
+    e.preventDefault()
+    setError('')
+    setLoading(true)
     try {
-      const user = await login(email, password);
-      navigate(`/${user.role}`);
+      const user = await login(email, password)
+      navigate(`/${user.role}`)
     } catch (err) {
-      setError(err.response?.data?.message || 'Login gagal. Periksa email/password Anda.');
+      setError(err.response?.data?.message || Object.values(err.response?.data?.errors || {})[0]?.[0] || 'Login gagal.')
     } finally {
-      setLoading(false);
+      setLoading(false)
     }
   }
 
   return (
-    <div style={{ width: '100vw', minHeight: '100vh', display: 'flex', backgroundColor: '#FFFFFF' }}>
+    <div style={{ width: '100vw', minHeight: '100vh', display: 'flex', background: '#FFFFFF' }}>
+
       {/* PANEL KIRI: Identitas Instansi & Branding */}
-      <div style={{ flex: '1.25', backgroundColor: '#07142E', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', padding: '60px 72px', minWidth: '520px', borderRight: '5px solid #F2A90A', position: 'relative', overflow: 'hidden' }}>
-        
-        {/* Foto Gedung Background */}
-        <div style={{ position: 'absolute', top: '-10px', right: '-10px', bottom: '-10px', left: '-10px', backgroundImage: 'url(/gedung.jpeg)', backgroundSize: 'cover', backgroundPosition: 'center', opacity: 0.18, filter: 'grayscale(100%) blur(2px)', pointerEvents: 'none', zIndex: 1 }} />
+      <div style={{ flex: '1.25', background: '#07142E', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', padding: '60px 72px', minWidth: '520px', borderRight: '5px solid #F2A90A', position: 'relative', overflow: 'hidden' }}>
+
+        {/* Foto Gedung Background (Opacity 0.2 / 20%) */}
+        <div style={{ position: 'absolute', top: '-10px', right: '-10px', bottom: '-10px', left: '-10px', backgroundImage: 'url(/gedung.jpeg)', backgroundSize: 'cover', backgroundPosition: 'center', opacity: 0.2, filter: 'grayscale(100%) blur(2px)', pointerEvents: 'none', zIndex: 1 }} />
 
         {/* Gradient Darkener */}
         <div style={{ position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, background: 'linear-gradient(180deg, rgba(7, 20, 46, 0.88) 0%, rgba(7, 20, 46, 0.96) 100%)', pointerEvents: 'none', zIndex: 2 }} />
 
         {/* Header Balai */}
         <div style={{ position: 'relative', zIndex: 3, display: 'flex', alignItems: 'center', gap: '18px' }}>
-          <div style={{ width: '52px', height: '52px', borderRadius: '50%', backgroundColor: '#FFFFFF', display: 'flex', alignItems: 'center', justify: 'center', flexShrink: 0, overflow: 'hidden', padding: '2px', boxShadow: '0 4px 14px rgba(0,0,0,0.5)' }}>
-            <img src="/logo-bapekom.jpg" alt="Logo Bapekom I Medan" style={{ width: '100%', height: '100%', objectFit: 'contain', borderRadius: '50%' }} />
+          <div style={{ width: '52px', height: '52px', borderRadius: '50%', background: '#FFFFFF', display: 'flex', alignItems: 'center', justify: 'center', flexShrink: 0, overflow: 'hidden', padding: '2px', boxShadow: '0 4px 14px rgba(0,0,0,0.5)' }}>
+            <img src="/bapekom1.jpg" alt="Logo Bapekom I Medan" style={{ width: '100%', height: '100%', objectFit: 'contain', borderRadius: '50%' }} />
           </div>
           <div>
             <div style={{ color: '#F2A90A', fontWeight: 700, fontSize: '11px', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: '4px', lineHeight: 1 }}>
@@ -54,7 +56,7 @@ export default function Login() {
         {/* Branding Utama SIPINTER */}
         <div style={{ position: 'relative', zIndex: 3, maxWidth: '540px', margin: '40px 0', display: 'flex', alignItems: 'center', gap: '24px' }}>
           <div style={{ width: '90px', height: '90px', display: 'flex', alignItems: 'center', justify: 'center', flexShrink: 0, filter: 'drop-shadow(0 8px 16px rgba(0,0,0,0.6))' }}>
-            <img src="/logo-sipinter.png" alt="Logo SIPINTER" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+            <img src="/2.png" alt="Logo SIPINTER" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
           </div>
           <div style={{ display: 'flex', flexDirection: 'column' }}>
             <h1 style={{ margin: '0 0 4px 0', fontWeight: 800, fontSize: '54px', color: '#FFFFFF', letterSpacing: '0.02em', lineHeight: 1 }}>
@@ -73,13 +75,13 @@ export default function Login() {
       </div>
 
       {/* PANEL KANAN: Form Login */}
-      <div style={{ flex: 1, display: 'flex', alignItems: 'center', justify: 'center', padding: '60px', minWidth: '420px', backgroundColor: '#FFFFFF' }}>
+      <div style={{ flex: 1, display: 'flex', alignItems: 'center', justify: 'center', padding: '60px', minWidth: '420px', background: '#FFFFFF' }}>
         <div style={{ width: '100%', maxWidth: '380px' }}>
 
           {/* Header Form */}
           <div style={{ marginBottom: '32px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px' }}>
-              <img src="/logo-sipinter.png" alt="SIPINTER Icon" style={{ width: '26px', height: '26px', objectFit: 'contain' }} />
+              <img src="/2.png" alt="SIPINTER Icon" style={{ width: '26px', height: '26px', objectFit: 'contain' }} />
               <span style={{ fontWeight: 800, fontSize: '15px', color: '#07142E', letterSpacing: '0.04em' }}>SIPINTER</span>
             </div>
             <h2 style={{ margin: '0 0 8px 0', fontWeight: 700, fontSize: '26px', color: '#07142E' }}>Selamat datang kembali</h2>
@@ -104,7 +106,7 @@ export default function Login() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="nama@pu.go.id"
-                style={{ height: '50px', borderRadius: '8px', border: '1.5px solid #CBD5E1', padding: '0 16px', fontSize: '15px', color: '#0F172A', backgroundColor: '#F8FAFC', outline: 'none' }}
+                style={{ height: '50px', borderRadius: '8px', border: '1.5px solid #CBD5E1', padding: '0 16px', fontSize: '15px', color: '#0F172A', background: '#F8FAFC', outline: 'none' }}
               />
             </div>
 
@@ -118,17 +120,16 @@ export default function Login() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="••••••••"
-                  style={{ width: '100%', height: '50px', borderRadius: '8px', border: '1.5px solid #CBD5E1', padding: '0 44px 0 16px', fontSize: '15px', color: '#0F172A', backgroundColor: '#F8FAFC', outline: 'none' }}
+                  style={{ width: '100%', height: '50px', borderRadius: '8px', border: '1.5px solid #CBD5E1', padding: '0 44px 0 16px', fontSize: '15px', color: '#0F172A', background: '#F8FAFC', outline: 'none' }}
                 />
                 <button
                   type="button"
-                  onClick={() => setShowPassword(!showPassword)}
+                  onClick={() => setShowPassword((s) => !s)}
                   style={{ position: 'absolute', right: '14px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: '#64748B', display: 'flex', padding: 0 }}
+                  tabIndex={-1}
+                  aria-label={showPassword ? 'Sembunyikan password' : 'Tampilkan password'}
                 >
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7Z" />
-                    <circle cx="12" cy="12" r="3" />
-                  </svg>
+                  {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                 </button>
               </div>
             </div>
@@ -144,6 +145,7 @@ export default function Login() {
 
         </div>
       </div>
+
     </div>
-  );
+  )
 }
