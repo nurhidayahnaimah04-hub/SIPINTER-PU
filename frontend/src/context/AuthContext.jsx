@@ -5,22 +5,22 @@ const AuthContext = createContext(null)
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(() => {
-    const stored = localStorage.getItem('user')
+    const stored = sessionStorage.getItem('user')
     return stored ? JSON.parse(stored) : null
   })
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    const token = localStorage.getItem('token')
+    const token = sessionStorage.getItem('token')
     if (!token) { setLoading(false); return }
     api.get('/me')
       .then((res) => {
         setUser(res.data)
-        localStorage.setItem('user', JSON.stringify(res.data))
+        sessionStorage.setItem('user', JSON.stringify(res.data))
       })
       .catch(() => {
-        localStorage.removeItem('token')
-        localStorage.removeItem('user')
+        sessionStorage.removeItem('token')
+        sessionStorage.removeItem('user')
         setUser(null)
       })
       .finally(() => setLoading(false))
@@ -28,22 +28,22 @@ export function AuthProvider({ children }) {
 
   async function login(email, password) {
     const res = await api.post('/login', { email, password })
-    localStorage.setItem('token', res.data.token)
-    localStorage.setItem('user', JSON.stringify(res.data.user))
+    sessionStorage.setItem('token', res.data.token)
+    sessionStorage.setItem('user', JSON.stringify(res.data.user))
     setUser(res.data.user)
     return res.data.user
   }
 
   async function logout() {
     try { await api.post('/logout') } catch (e) { /* ignore */ }
-    localStorage.removeItem('token')
-    localStorage.removeItem('user')
+    sessionStorage.removeItem('token')
+    sessionStorage.removeItem('user')
     setUser(null)
   }
 
   function updateUser(newUser) {
     setUser(newUser)
-    localStorage.setItem('user', JSON.stringify(newUser))
+    sessionStorage.setItem('user', JSON.stringify(newUser))
   }
 
   return (
@@ -55,4 +55,4 @@ export function AuthProvider({ children }) {
 
 export function useAuth() {
   return useContext(AuthContext)
-}
+} 
