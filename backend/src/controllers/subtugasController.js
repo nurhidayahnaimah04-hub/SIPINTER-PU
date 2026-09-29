@@ -119,17 +119,17 @@ export async function show(req, res) {
 
 export async function store(req, res) {
   const tugasId = req.params.tugas;
-  const { judul, deskripsi = null, assigned_to, deadline = null } = req.body || {};
+  const { judul, deskripsi = null, assigned_to, deadline } = req.body || {};
 
-  if (!judul || !assigned_to) {
-    return res.status(422).json({ message: 'Data subtugas tidak lengkap.' });
+  if (!judul || !assigned_to || !deadline) {
+    return res.status(422).json({ message: 'Data subtugas tidak lengkap (judul, pelaksana, dan deadline wajib diisi).' });
   }
 
   try {
     const { rows } = await pool.query(
       `INSERT INTO subtugas (tugas_id, judul, deskripsi, assigned_to, deadline, created_by, status, progress)
        VALUES ($1,$2,$3,$4,$5,$6,'Belum Dimulai',0) RETURNING *`,
-      [tugasId, judul, deskripsi, assigned_to, deadline || null, req.user.id]
+      [tugasId, judul, deskripsi, assigned_to, deadline, req.user.id]
     );
     const subtugas = rows[0];
 
@@ -176,11 +176,15 @@ export async function update(req, res) {
   const subtugasId = req.params.subtugas;
   const { judul, deskripsi, assigned_to, deadline } = req.body || {};
 
+  if (typeof deadline !== 'undefined' && (!deadline || deadline === null)) {
+    return res.status(422).json({ message: 'Tanggal deadline subtugas wajib diisi.' });
+  }
+
   const fields = {};
   if (typeof judul !== 'undefined') fields.judul = judul;
   if (typeof deskripsi !== 'undefined') fields.deskripsi = deskripsi || null;
   if (typeof assigned_to !== 'undefined') fields.assigned_to = assigned_to;
-  if (typeof deadline !== 'undefined') fields.deadline = deadline || null;
+  if (typeof deadline !== 'undefined') fields.deadline = deadline;
 
   const keys = Object.keys(fields);
   let subtugas;

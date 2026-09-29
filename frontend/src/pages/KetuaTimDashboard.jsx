@@ -31,6 +31,7 @@ export default function KetuaTimDashboard() {
 
   async function handleCreateTask(e, tugasPokokId) {
     e.preventDefault()
+    if (!taskForm.tanggal_target) return
     await api.post('/main-tasks', { ...taskForm, tugas_pokok_id: tugasPokokId })
     setTaskForm({ judul: '', deskripsi: '', tanggal_target: '' })
     setNewTaskFor(null)
@@ -39,6 +40,7 @@ export default function KetuaTimDashboard() {
 
   async function handleCreateSubTask(e, mainTaskId) {
     e.preventDefault()
+    if (!subTaskForm.tanggal_target) return
     await api.post(`/main-tasks/${mainTaskId}/sub-tasks`, subTaskForm)
     setSubTaskForm({ judul: '', assigned_to: '', tanggal_target: '' })
     setSubTaskFormFor(null)
@@ -157,6 +159,7 @@ export default function KetuaTimDashboard() {
                           </select>
                           <input
                             type="date"
+                            required
                             value={subTaskForm.tanggal_target}
                             onChange={(e) => setSubTaskForm({ ...subTaskForm, tanggal_target: e.target.value })}
                             className="border border-gray-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-pupr-blue-light"
@@ -204,6 +207,7 @@ export default function KetuaTimDashboard() {
                   />
                   <input
                     type="date"
+                    required
                     value={taskForm.tanggal_target}
                     onChange={(e) => setTaskForm({ ...taskForm, tanggal_target: e.target.value })}
                     className="border border-gray-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-pupr-blue-light"

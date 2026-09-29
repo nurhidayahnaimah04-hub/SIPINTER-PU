@@ -93,6 +93,10 @@ export default function TugasDetailView({ basePath, role }) {
   // Menggunakan FormData untuk mendukung Upload File Multi
   async function handleAddSubtugas(e) {
     e.preventDefault()
+    if (!form.deadline) {
+      setSubtugasError('Tanggal deadline wajib diisi.')
+      return
+    }
     setSaving(true)
     setSubtugasError('')
     try {
@@ -100,7 +104,7 @@ export default function TugasDetailView({ basePath, role }) {
       formData.append('judul', form.judul);
       formData.append('deskripsi', form.deskripsi);
       formData.append('assigned_to', form.assigned_to);
-      if (form.deadline) formData.append('deadline', form.deadline);
+      formData.append('deadline', form.deadline);
       
       subtugasFiles.forEach((f) => formData.append('files', f));
 
@@ -172,6 +176,10 @@ export default function TugasDetailView({ basePath, role }) {
 
   async function handleEditTugas(e) {
     e.preventDefault()
+    if (!editForm.deadline) {
+      setEditError('Tanggal deadline wajib diisi.')
+      return
+    }
     setEditSaving(true)
     setEditError('')
     try {
@@ -349,8 +357,8 @@ export default function TugasDetailView({ basePath, role }) {
             </select>
           </div>
           <div>
-            <label className="label">Deadline (opsional)</label>
-            <input type="date" className="input" value={form.deadline} onChange={(e) => setForm({ ...form, deadline: e.target.value })} />
+            <label className="label">Deadline</label>
+            <input type="date" required className="input" value={form.deadline} onChange={(e) => setForm({ ...form, deadline: e.target.value })} />
           </div>
           
           <button className="btn bg-pupr-blue-dark hover:bg-pupr-blue text-white transition-colors disabled:opacity-60 w-full" disabled={saving}>
@@ -372,8 +380,8 @@ export default function TugasDetailView({ basePath, role }) {
               <textarea className="input" rows={3} value={editForm.deskripsi} onChange={(e) => setEditForm({ ...editForm, deskripsi: e.target.value })} />
             </div>
             <div>
-              <label className="label">Deadline (opsional)</label>
-              <input type="date" className="input" value={editForm.deadline} onChange={(e) => setEditForm({ ...editForm, deadline: e.target.value })} />
+              <label className="label">Deadline</label>
+              <input type="date" required className="input" value={editForm.deadline} onChange={(e) => setEditForm({ ...editForm, deadline: e.target.value })} />
             </div>
             <button className="btn bg-pupr-blue-dark hover:bg-pupr-blue text-white transition-colors disabled:opacity-60 w-full" disabled={editSaving}>{editSaving ? 'Menyimpan...' : 'Simpan Perubahan'}</button>
           </form>
@@ -436,4 +444,4 @@ export default function TugasDetailView({ basePath, role }) {
       </Modal>
     </div>
   )
-}
+} 

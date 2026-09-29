@@ -105,10 +105,10 @@ export async function index(req, res) {
 }
 
 export async function store(req, res) {
-  const { judul, deskripsi = null, deadline = null, periode_id = null, team_id } = req.body || {};
+  const { judul, deskripsi = null, deadline, periode_id = null, team_id } = req.body || {};
 
-  if (!judul) {
-    return res.status(422).json({ message: 'Judul tugas wajib diisi.' });
+  if (!judul || !deadline) {
+    return res.status(422).json({ message: 'Judul tugas dan deadline wajib diisi.' });
   }
 
   let finalPeriodeId = periode_id;
@@ -150,7 +150,7 @@ export async function store(req, res) {
     const { rows } = await pool.query(
       `INSERT INTO tugas (judul, deskripsi, periode_id, deadline, team_id, created_by, status, progress)
        VALUES ($1,$2,$3,$4,$5,$6,'Belum Dimulai',0) RETURNING *`,
-      [judul, deskripsi || null, finalPeriodeId, deadline || null, finalTeamId, req.user.id]
+      [judul, deskripsi || null, finalPeriodeId, deadline, finalTeamId, req.user.id]
     );
     const tugas = rows[0];
 
@@ -317,10 +317,14 @@ export async function update(req, res) {
     return res.status(403).json({ message: 'Anda tidak memiliki akses untuk mengubah tugas ini.' });
   }
 
+  if (typeof deadline !== 'undefined' && (!deadline || deadline === null)) {
+    return res.status(422).json({ message: 'Tanggal deadline tugas wajib diisi.' });
+  }
+
   const fields = {};
   if (typeof judul !== 'undefined') fields.judul = judul;
   if (typeof deskripsi !== 'undefined') fields.deskripsi = deskripsi || null;
-  if (typeof deadline !== 'undefined') fields.deadline = deadline || null;
+  if (typeof deadline !== 'undefined') fields.deadline = deadline;
 
   const keys = Object.keys(fields);
   if (keys.length === 0) {

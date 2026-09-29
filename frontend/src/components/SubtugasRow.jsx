@@ -84,6 +84,10 @@ export default function SubtugasRow({ subtugas, role, onChanged, users = [] }) {
 
   async function handleEdit(e) {
     e.preventDefault()
+    if (!editForm.deadline) {
+      setEditError('Tanggal deadline wajib diisi.')
+      return
+    }
     setEditSaving(true)
     setEditError('')
     try {
@@ -91,7 +95,7 @@ export default function SubtugasRow({ subtugas, role, onChanged, users = [] }) {
       formData.append('judul', editForm.judul)
       formData.append('deskripsi', editForm.deskripsi)
       formData.append('assigned_to', editForm.assigned_to)
-      if (editForm.deadline) formData.append('deadline', editForm.deadline)
+      formData.append('deadline', editForm.deadline)
 
       editFiles.forEach((f) => formData.append('files', f))
 
@@ -348,8 +352,8 @@ export default function SubtugasRow({ subtugas, role, onChanged, users = [] }) {
             </div>
             
             <div>
-              <label className="label">Deadline (opsional)</label>
-              <input type="date" className="input" value={editForm.deadline} onChange={(e) => setEditForm({ ...editForm, deadline: e.target.value })} />
+              <label className="label">Deadline</label>
+              <input type="date" required className="input" value={editForm.deadline} onChange={(e) => setEditForm({ ...editForm, deadline: e.target.value })} />
             </div>
             
             <button className="btn bg-pupr-blue-dark hover:bg-pupr-blue text-white transition-colors disabled:opacity-60 w-full" disabled={editSaving}>

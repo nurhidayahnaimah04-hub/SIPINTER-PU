@@ -89,6 +89,10 @@ export default function TugasListView({ basePath, canCreate, title, subtitle, gr
 
   async function handleCreate(e) {
     e.preventDefault()
+    if (!form.deadline) {
+      setError('Tanggal deadline wajib diisi.')
+      return
+    }
     setSaving(true)
     setError('')
     try {
@@ -193,8 +197,8 @@ export default function TugasListView({ basePath, canCreate, title, subtitle, gr
               <textarea className="input" rows={3} value={form.deskripsi} onChange={(e) => setForm({ ...form, deskripsi: e.target.value })} />
             </div>
             <div>
-              <label className="label">Deadline (opsional)</label>
-              <input type="date" className="input" value={form.deadline} onChange={(e) => setForm({ ...form, deadline: e.target.value })} />
+              <label className="label">Deadline</label>
+              <input type="date" required className="input" value={form.deadline} onChange={(e) => setForm({ ...form, deadline: e.target.value })} />
             </div>
 
             {/* Opsi Tim hanya ditampilkan untuk Kasubag. Untuk Anggota/Katim, otomatis terkunci di backend */}
@@ -238,6 +242,10 @@ function TugasCard({ t, basePath, canManage, onChanged }) {
 
   async function handleEdit(e) {
     e.preventDefault()
+    if (!form.deadline) {
+      setError('Tanggal deadline wajib diisi.')
+      return
+    }
     setSaving(true)
     setError('')
     try {
@@ -315,8 +323,8 @@ function TugasCard({ t, basePath, canManage, onChanged }) {
               <textarea className="input" rows={3} value={form.deskripsi} onChange={(e) => setForm({ ...form, deskripsi: e.target.value })} />
             </div>
             <div>
-              <label className="label">Deadline (opsional)</label>
-              <input type="date" className="input" value={form.deadline} onChange={(e) => setForm({ ...form, deadline: e.target.value })} />
+              <label className="label">Deadline</label>
+              <input type="date" required className="input" value={form.deadline} onChange={(e) => setForm({ ...form, deadline: e.target.value })} />
             </div>
             <button className="btn bg-pupr-blue-dark hover:bg-pupr-blue text-white transition-colors disabled:opacity-60 w-full" disabled={saving}>{saving ? 'Menyimpan...' : 'Simpan Perubahan'}</button>
           </form>

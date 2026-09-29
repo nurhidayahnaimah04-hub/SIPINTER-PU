@@ -34,6 +34,7 @@ export default function ProjectDetailView({ basePath, canAddSubtask, canApproveP
 
   async function handleAddSubtask(e) {
     e.preventDefault()
+    if (!form.deadline) return
     setSaving(true)
     try {
       await api.post(`/projects/${id}/subtasks`, form)
