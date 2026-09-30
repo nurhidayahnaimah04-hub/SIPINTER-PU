@@ -64,32 +64,31 @@ export default function TugasDetailView({ basePath, role }) {
 
   useAutoRefresh(load, [id])
 
-  // LOGIKA ANGGOTA & KATIM (MULTI-ROLE):
+  // LOGIKA ANGGOTA & KATIM (Tugas Tim vs Tugas Umum):
   const availableUsers = useMemo(() => {
     if (!tugas) return [];
 
-    let usersList = [];
+    // 1. TUGAS UMUM (tanpa tim): Tampilkan seluruh daftar pegawai di sistem
+    if (isTugasUmum || !tugas.team_id || !tugas.team) {
+      return tugas.all_users || [];
+    }
 
-    // 1. Jika Katim membuka halaman, prioritaskan my_team_members (yang sudah memuat Katim + Anggota Tim)
+    // 2. TUGAS TIM: Jika Katim membuka halaman, prioritaskan my_team_members
     if (role === 'katim' && tugas.my_team_members?.length) {
       return tugas.my_team_members;
     }
 
-    // 2. Jika tugas biasa yang punya tim
-    if (tugas.team) {
-      usersList = [...(tugas.team.members || [])];
-      
-      // Tambahkan Katim ke dalam list jika belum ada di members
-      if (tugas.team.katim && !usersList.some((m) => m.id === tugas.team.katim.id)) {
-        usersList.unshift({
-          id: tugas.team.katim.id,
-          name: `${tugas.team.katim.name} (Katim)`,
-        });
-      }
+    // 3. TUGAS TIM Biasa: Ambil anggota tim + Katim
+    let usersList = [...(tugas.team.members || [])];
+    if (tugas.team.katim && !usersList.some((m) => m.id === tugas.team.katim.id)) {
+      usersList.unshift({
+        id: tugas.team.katim.id,
+        name: `${tugas.team.katim.name} (Katim)`,
+      });
     }
 
     return usersList;
-  }, [tugas, role]);
+  }, [tugas, role, isTugasUmum]);
 
   // Menggunakan FormData untuk mendukung Upload File Multi & Array Multi-Assignee
   async function handleAddSubtugas(e) {
