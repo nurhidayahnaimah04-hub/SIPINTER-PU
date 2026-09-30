@@ -16,7 +16,6 @@ export async function index(req, res) {
   const { search, role } = req.query;
   const page = Math.max(Number(req.query.page || 1), 1);
   
-  // PERBAIKAN: Gunakan limit dari query jika ada, atau default 1000 agar seluruh user tampil
   const perPage = Number(req.query.limit) || 1000;
   const offset = (page - 1) * perPage;
 
@@ -43,9 +42,17 @@ export async function index(req, res) {
     dataParams
   );
 
+  const sanitizedUsers = rows.map(sanitize);
+
+  // PERBAIKAN: Jika rute yang dipanggil adalah /users-lite, langsung kembalikan array data mentah
+  // agar frontend tidak perlu membaca format paginasi bersarang (.data.data)
+  if (req.originalUrl.includes('users-lite')) {
+    return res.json(sanitizedUsers);
+  }
+
   return res.json(
     buildPaginationResponse({
-      data: rows.map(sanitize),
+      data: sanitizedUsers,
       total: countRows[0].total,
       page,
       perPage,
