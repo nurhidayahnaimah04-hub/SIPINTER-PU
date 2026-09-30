@@ -91,12 +91,12 @@ export default function SubtugasRow({ subtugas, role, onChanged, users = [] }) {
   }
 
   function openEdit() {
-    // Ambil daftar ID dari subtugas.assignees jika ada, atau fallback ke assigned_to
+    // DIPERBAIKI: Pastikan inisialisasi mengambil ID secara bersih dan akurat agar tidak menumpuk/lengket
     let initialAssignees = [];
     if (subtugas.assignees && subtugas.assignees.length > 0) {
       initialAssignees = subtugas.assignees.map(a => a.id);
     } else if (subtugas.assigned_to) {
-      initialAssignees = [subtugas.assigned_to];
+      initialAssignees = Array.isArray(subtugas.assigned_to) ? subtugas.assigned_to : [subtugas.assigned_to];
     } else if (subtugas.assignee?.id) {
       initialAssignees = [subtugas.assignee.id];
     }
