@@ -32,12 +32,16 @@ export default function SubtugasRow({ subtugas, role, onChanged, users = [] }) {
   // Membuka izin edit & kelola subtugas untuk role 'anggota'
   const canManageSubtugas = ['kasubag', 'katim', 'anggota', 'kabalai'].includes(role)
 
-  // Ambil daftar seluruh pegawai jika prop users kosong (misal pada Tugas Umum)
+  // DIPERBAIKI: Selalu tarik data /users-lite agar daftar pegawai tidak kosong di Tugas Umum
   useEffect(() => {
-    if (!users || users.length === 0) {
-      api.get('/users-lite').then((res) => setFallbackUsers(res.data || [])).catch(() => {})
-    }
-  }, [users])
+    api.get('/users-lite')
+      .then((res) => {
+        if (res.data && res.data.length > 0) {
+          setFallbackUsers(res.data);
+        }
+      })
+      .catch((err) => console.error("Gagal memuat daftar user lite:", err));
+  }, [users]);
 
   // Gabungkan sumber user dari prop atau fallback
   const availableUsersList = users && users.length > 0 ? users : fallbackUsers;
