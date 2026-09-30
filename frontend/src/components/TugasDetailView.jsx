@@ -13,11 +13,14 @@ import { usePeriode } from '../context/PeriodeContext'
 import { ArrowLeft, Plus, MessageSquare, CheckCircle2, XCircle, Copy, Pencil, Trash2, AlertTriangle, UploadCloud } from 'lucide-react'
 
 // role: 'kabalai' | 'kasubag' | 'katim' | 'anggota'
-export default function TugasDetailView({ basePath, role }) {
+export default function TugasDetailView({ basePath, role: propRole }) {
   const { id } = useParams()
   const { user } = useAuth()
   const navigate = useNavigate()
   const [tugas, setTugas] = useState(null)
+
+  // Mengutamakan role dari AuthContext agar presisi saat login sebagai Anggota
+  const activeRole = user?.role || propRole
 
   const [subtugasOpen, setSubtugasOpen] = useState(false)
   // Fitur 1: Inisialisasi assigned_to dalam bentuk Array untuk Multi-Assignee
@@ -50,12 +53,13 @@ export default function TugasDetailView({ basePath, role }) {
 
   // LOGIKA AKSES
   const isTugasUmum = tugas && tugas.team_id === null;
-  // Fitur 2: Anggota juga bisa menambah subtugas
-  const canCreateSubtugas = tugas && (isTugasUmum ? (role === 'katim' || role === 'anggota') : (role === 'katim' || role === 'kasubag' || role === 'anggota'));
   
-  const canVerifikasiTugas = role === 'kasubag'
-  const canDuplicate = role === 'kasubag'
-  const canEditTugas = role === 'kasubag'
+  // Fitur 2: Otorisasi Mandiri untuk Kasubag, Katim, Anggota, dan Kabalai
+  const canCreateSubtugas = tugas && ['kasubag', 'katim', 'anggota', 'kabalai'].includes(activeRole);
+  
+  const canVerifikasiTugas = activeRole === 'kasubag'
+  const canDuplicate = activeRole === 'kasubag'
+  const canEditTugas = activeRole === 'kasubag'
 
   function load() {
     api.get(`/tugas/${id}`).then((res) => setTugas(res.data))
@@ -74,7 +78,7 @@ export default function TugasDetailView({ basePath, role }) {
     }
 
     // 2. TUGAS TIM: Jika Katim membuka halaman, prioritaskan my_team_members
-    if (role === 'katim' && tugas.my_team_members?.length) {
+    if (activeRole === 'katim' && tugas.my_team_members?.length) {
       return tugas.my_team_members;
     }
 
@@ -88,7 +92,7 @@ export default function TugasDetailView({ basePath, role }) {
     }
 
     return usersList;
-  }, [tugas, role, isTugasUmum]);
+  }, [tugas, activeRole, isTugasUmum]);
 
   // Menggunakan FormData untuk mendukung Upload File Multi & Array Multi-Assignee
   async function handleAddSubtugas(e) {
@@ -111,7 +115,7 @@ export default function TugasDetailView({ basePath, role }) {
     try {
       const formData = new FormData();
       formData.append('judul', form.judul);
-      formData.append('deskripsi', form.deskripsi);
+      formData.append('deskripsi', form.deskripsi || '');
       formData.append('deadline', form.deadline);
       
       // Kirim array assigned_to ke FormData
@@ -297,7 +301,7 @@ export default function TugasDetailView({ basePath, role }) {
       {!tugas.subtugas?.length ? <EmptyState text="Belum ada subtugas." /> : (
         <div className="space-y-3 mb-6">
           {tugas.subtugas.map((s) => (
-            <SubtugasRow key={s.id} subtugas={s} role={role} onChanged={load} users={availableUsers} />
+            <SubtugasRow key={s.id} subtugas={s} role={activeRole} onChanged={load} users={availableUsers} />
           ))}
         </div>
       )}

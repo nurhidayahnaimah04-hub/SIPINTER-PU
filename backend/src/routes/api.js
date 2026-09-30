@@ -55,14 +55,13 @@ router.put('/users/:user', role('kabalai', 'kasubag'), h(UserController.update))
 router.delete('/users/:user', role('kabalai', 'kasubag'), h(UserController.destroy));
 router.delete('/users/:user/permanent', role('kabalai', 'kasubag'), h(UserController.destroyPermanent));
 
-// katim & kasubag boleh melihat daftar user (untuk pilih anggota / assign)
-router.get('/users-lite', role('kabalai', 'kasubag', 'katim'), h(UserController.index));
+// PERBAIKAN 1: Izinkan anggota melihat daftar user-lite (agar daftar centang pelaksana tidak kosong saat edit/tambah)
+router.get('/users-lite', role('kabalai', 'kasubag', 'katim', 'anggota'), h(UserController.index));
 
 // Tugas (Kasubag, Katim, Anggota)
 router.get('/tugas', h(TugasController.index));
 router.get('/tugas/:tugas', h(TugasController.show));
 
-// PERBAIKAN FITUR BARU: Mengizinkan katim dan anggota membuat, mengedit, serta menghapus tugas mandiri
 router.post('/tugas', role('kasubag', 'katim', 'anggota'), h(TugasController.store));
 router.put('/tugas/:tugas', role('kasubag', 'katim', 'anggota'), h(TugasController.update));
 router.delete('/tugas/:tugas', role('kasubag', 'katim', 'anggota'), h(TugasController.destroy));
@@ -71,29 +70,28 @@ router.post('/tugas/:tugas/verifikasi', role('kasubag'), h(TugasController.verif
 router.post('/tugas/:tugas/duplicate', role('kasubag'), h(TugasController.duplicate));
 router.post('/tugas/:tugas/lampiran', uploadLampiranTugas.single('file'), h(TugasController.uploadLampiran));
 
-// Subtugas (Katim atau Kasubag -> Anggota)
+// Subtugas
 router.get('/subtugas', h(SubtugasController.index));
 router.get('/subtugas/:subtugas', h(SubtugasController.show));
 
-// UBAH: Tambahkan upload middleware agar bisa menerima multi file (array 'files')
+// PERBAIKAN 2: Izinkan role 'anggota' untuk membuat subtugas baru
 router.post(
   '/tugas/:tugas/subtugas', 
-  role('katim', 'kasubag'), 
+  role('kasubag', 'katim', 'anggota'), 
   uploadLampiranTugas.array('files'), 
   h(SubtugasController.store)
 );
 
-// UBAH: Tambahkan middleware uploadLampiranTugas.array('files') pada rute PUT
+// PERBAIKAN 3: Izinkan role 'anggota' untuk mengedit dan memilih pelaksana subtugas
 router.put(
   '/subtugas/:subtugas', 
-  role('katim', 'kasubag'), 
+  role('kasubag', 'katim', 'anggota'), 
   uploadLampiranTugas.array('files'), 
   h(SubtugasController.update)
 );
-router.delete('/subtugas/:subtugas', role('katim', 'kasubag'), h(SubtugasController.destroy));
+router.delete('/subtugas/:subtugas', role('kasubag', 'katim', 'anggota'), h(SubtugasController.destroy));
 
-// TAMBAHKAN BARIS INI UNTUK MENGHAPUS FILE LAMPIRAN:
-router.delete('/subtugas/files/:fileId', role('katim', 'kasubag', 'anggota'), h(SubtugasController.destroyFile));
+router.delete('/subtugas/files/:fileId', role('kasubag', 'katim', 'anggota'), h(SubtugasController.destroyFile));
 
 // Update progres + bukti (oleh Anggota pemilik subtugas)
 router.post(

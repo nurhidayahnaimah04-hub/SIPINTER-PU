@@ -144,13 +144,13 @@ export async function store(req, res) {
   const tugasId = req.params.tugas;
   const { judul, deskripsi = null, assigned_to, deadline } = req.body || {};
 
-  // FITUR 2: Otorisasi role (Kasubag, Katim, & Anggota diperbolehkan)
+  // Otorisasi role: Kasubag, Katim, Anggota, & Kabalai diperbolehkan membuat subtugas
   const allowedRoles = ['kasubag', 'katim', 'anggota', 'kabalai'];
   if (!allowedRoles.includes(req.user.role)) {
     return res.status(403).json({ message: 'Anda tidak memiliki hak akses untuk menambahkan subtugas.' });
   }
 
-  // FITUR 1: Robust parsing assigned_to (Multi-Assignee dari JSON maupun FormData)
+  // Parsing assigned_to (Multi-Assignee dari JSON maupun FormData)
   let assigneesList = [];
   if (Array.isArray(assigned_to)) {
     assigneesList = assigned_to.map(Number).filter(Boolean);
@@ -232,90 +232,101 @@ export async function update(req, res) {
   const subtugasId = req.params.subtugas;
   const { judul, deskripsi, assigned_to, deadline } = req.body || {};
 
-  if (typeof deadline !== 'undefined' && (!deadline || deadline === null)) {
-    return res.status(422).json({ message: 'Tanggal deadline subtugas wajib diisi.' });
-  }
+  try {
+    const { rows: currentRows } = await pool.query(`SELECT * FROM subtugas WHERE id = $1`, [subtugasId]);
+    if (!currentRows.length) return res.status(404).json({ message: 'Subtugas tidak ditemukan.' });
+    const current = currentRows[0];
 
-  const fields = {};
-  if (typeof judul !== 'undefined') fields.judul = judul;
-  if (typeof deskripsi !== 'undefined') fields.deskripsi = deskripsi || null;
-  if (typeof deadline !== 'undefined') fields.deadline = deadline;
-
-  // FITUR 1: Robust parsing assigned_to untuk Update
-  let assigneesList = [];
-  if (typeof assigned_to !== 'undefined') {
-    if (Array.isArray(assigned_to)) {
-      assigneesList = assigned_to.map(Number).filter(Boolean);
-    } else if (typeof assigned_to === 'string') {
-      assigneesList = assigned_to.split(',').map(Number).filter(Boolean);
-    } else if (assigned_to) {
-      assigneesList = [Number(assigned_to)].filter(Boolean);
+    // OTORISASI DIPERBAIKI: Mengizinkan Kasubag, Katim, Anggota, & Kabalai mengedit subtugas
+    const allowedRoles = ['kasubag', 'katim', 'anggota', 'kabalai'];
+    if (!allowedRoles.includes(req.user.role) && current.created_by !== req.user.id) {
+      return res.status(403).json({ message: 'Anda tidak memiliki hak akses untuk mengubah subtugas ini.' });
     }
-    fields.assigned_to = assigneesList[0] || null;
-  }
 
-  const keys = Object.keys(fields);
-  let subtugas;
+    if (typeof deadline !== 'undefined' && (!deadline || deadline === null)) {
+      return res.status(422).json({ message: 'Tanggal deadline subtugas wajib diisi.' });
+    }
 
-  if (keys.length === 0) {
-    const { rows } = await pool.query(`SELECT * FROM subtugas WHERE id = $1`, [subtugasId]);
-    subtugas = rows[0];
-  } else {
-    const setClauses = keys.map((k, i) => `${k} = $${i + 1}`);
-    const values = keys.map((k) => fields[k]);
-    values.push(subtugasId);
-    const { rows } = await pool.query(
-      `UPDATE subtugas SET ${setClauses.join(', ')}, updated_at = now() WHERE id = $${values.length} RETURNING *`,
-      values
+    const fields = {};
+    if (typeof judul !== 'undefined') fields.judul = judul;
+    if (typeof deskripsi !== 'undefined') fields.deskripsi = deskripsi || null;
+    if (typeof deadline !== 'undefined') fields.deadline = deadline;
+
+    // Parsing assigned_to untuk Update Multi-Assignee
+    let assigneesList = [];
+    if (typeof assigned_to !== 'undefined') {
+      if (Array.isArray(assigned_to)) {
+        assigneesList = assigned_to.map(Number).filter(Boolean);
+      } else if (typeof assigned_to === 'string') {
+        assigneesList = assigned_to.split(',').map(Number).filter(Boolean);
+      } else if (assigned_to) {
+        assigneesList = [Number(assigned_to)].filter(Boolean);
+      }
+      fields.assigned_to = assigneesList[0] || null;
+    }
+
+    const keys = Object.keys(fields);
+    let subtugas;
+
+    if (keys.length === 0) {
+      subtugas = current;
+    } else {
+      const setClauses = keys.map((k, i) => `${k} = $${i + 1}`);
+      const values = keys.map((k) => fields[k]);
+      values.push(subtugasId);
+      const { rows } = await pool.query(
+        `UPDATE subtugas SET ${setClauses.join(', ')}, updated_at = now() WHERE id = $${values.length} RETURNING *`,
+        values
+      );
+      subtugas = rows[0];
+    }
+
+    // Update relasi pelaksana di tabel perantara subtugas_assignees
+    if (typeof assigned_to !== 'undefined') {
+      await pool.query(`DELETE FROM subtugas_assignees WHERE subtugas_id = $1`, [subtugasId]);
+      for (const uid of assigneesList) {
+        await pool.query(
+          `INSERT INTO subtugas_assignees (subtugas_id, user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+          [subtugasId, uid]
+        );
+      }
+    }
+
+    const files = req.files || [];
+    if (files.length > 0) {
+      for (const f of files) {
+        const { url } = await uploadToSupabase(f, 'lampiran-tugas');
+        const type = classifyFileType(f.originalname);
+        await pool.query(
+          `INSERT INTO subtugas_files (subtugas_id, file_path, file_name, file_type, uploaded_at)
+           VALUES ($1,$2,$3,$4,now())`,
+          [subtugas.id, url, f.originalname, type]
+        );
+      }
+    }
+
+    await recalculateProgress(subtugas.tugas_id);
+    await ActivityLog.catat(req.user.id, `mengubah subtugas ${subtugas.judul}`, 'subtugas', subtugas.id);
+
+    const { rows: fresh } = await pool.query(
+      `SELECT s.*,
+          COALESCE(
+            (
+              SELECT json_agg(json_build_object('id', u.id, 'name', u.name))
+              FROM subtugas_assignees sa
+              JOIN users u ON u.id = sa.user_id
+              WHERE sa.subtugas_id = s.id
+            ),
+            '[]'::json
+          ) AS assignees
+       FROM subtugas s WHERE s.id = $1`,
+      [subtugasId]
     );
-    subtugas = rows[0];
+
+    return res.json(fresh[0]);
+  } catch (error) {
+    return res.status(500).json({ message: "Gagal memperbarui subtugas: " + error.message });
   }
-
-  if (!subtugas) return res.status(404).json({ message: 'Subtugas tidak ditemukan.' });
-
-  // Update daftar pelaksana di tabel perantara subtugas_assignees
-  if (typeof assigned_to !== 'undefined') {
-    await pool.query(`DELETE FROM subtugas_assignees WHERE subtugas_id = $1`, [subtugasId]);
-    for (const uid of assigneesList) {
-      await pool.query(
-        `INSERT INTO subtugas_assignees (subtugas_id, user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
-        [subtugasId, uid]
-      );
-    }
-  }
-
-  const files = req.files || [];
-  if (files.length > 0) {
-    for (const f of files) {
-      const { url } = await uploadToSupabase(f, 'lampiran-tugas');
-      const type = classifyFileType(f.originalname);
-      await pool.query(
-        `INSERT INTO subtugas_files (subtugas_id, file_path, file_name, file_type, uploaded_at)
-         VALUES ($1,$2,$3,$4,now())`,
-        [subtugas.id, url, f.originalname, type]
-      );
-    }
-  }
-
-  await recalculateProgress(subtugas.tugas_id);
-  await ActivityLog.catat(req.user.id, `mengubah subtugas ${subtugas.judul}`, 'subtugas', subtugas.id);
-
-  const { rows: fresh } = await pool.query(
-    `SELECT s.*,
-        COALESCE(
-          (
-            SELECT json_agg(json_build_object('id', u.id, 'name', u.name))
-            FROM subtugas_assignees sa
-            JOIN users u ON u.id = sa.user_id
-            WHERE sa.subtugas_id = s.id
-          ),
-          '[]'::json
-        ) AS assignees
-     FROM subtugas s WHERE s.id = $1`,
-    [subtugasId]
-  );
-
-  return res.json(fresh[0]);
 }
 
 export async function destroy(req, res) {

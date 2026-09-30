@@ -25,7 +25,9 @@ export default function SubtugasRow({ subtugas, role, onChanged, users = [] }) {
 
   const canVerifikasiKatim = role === 'katim' && subtugas.status === 'Menunggu Verifikasi Katim'
   const canVerifikasiKasubag = role === 'kasubag' && subtugas.status === 'Menunggu Verifikasi Kasubag'
-  const canManageSubtugas = role === 'katim' || role === 'kasubag'
+  
+  // PERBAIKAN: Membuka izin edit & kelola subtugas untuk role 'anggota'
+  const canManageSubtugas = ['kasubag', 'katim', 'anggota', 'kabalai'].includes(role)
 
   // Gabungkan file dari skema baru dan lama untuk ditampilkan di Detail & Modal Edit
   const oldSystemFiles = subtugas.updates

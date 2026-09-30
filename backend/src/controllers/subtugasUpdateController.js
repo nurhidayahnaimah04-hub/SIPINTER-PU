@@ -13,8 +13,17 @@ export async function store(req, res) {
   const subtugas = subtugasRows[0];
   if (!subtugas) return res.status(404).json({ message: 'Subtugas tidak ditemukan.' });
 
-  if (subtugas.assigned_to !== user.id) {
-    return res.status(403).json({ message: 'Anda bukan pemilik subtugas ini.' });
+  // PERBAIKAN OTORISASI MULTI-ASSIGNEE:
+  // Periksa apakah user adalah assigned_to utama ATAU terdaftar di tabel perantara subtugas_assignees
+  const { rows: assigneeCheck } = await pool.query(
+    `SELECT 1 FROM subtugas_assignees WHERE subtugas_id = $1 AND user_id = $2`,
+    [subtugasId, user.id]
+  );
+
+  const isAssigned = assigneeCheck.length > 0 || subtugas.assigned_to === user.id || subtugas.created_by === user.id;
+
+  if (!isAssigned) {
+    return res.status(403).json({ message: 'Anda bukan pelaksana subtugas ini.' });
   }
 
   if (getLocked(subtugas)) {
