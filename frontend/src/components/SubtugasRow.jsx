@@ -26,7 +26,7 @@ export default function SubtugasRow({ subtugas, role, onChanged, users = [] }) {
   const canVerifikasiKatim = role === 'katim' && subtugas.status === 'Menunggu Verifikasi Katim'
   const canVerifikasiKasubag = role === 'kasubag' && subtugas.status === 'Menunggu Verifikasi Kasubag'
   
-  // PERBAIKAN: Membuka izin edit & kelola subtugas untuk role 'anggota'
+  // Membuka izin edit & kelola subtugas untuk role 'anggota'
   const canManageSubtugas = ['kasubag', 'katim', 'anggota', 'kabalai'].includes(role)
 
   // Gabungkan file dari skema baru dan lama untuk ditampilkan di Detail & Modal Edit
@@ -117,8 +117,8 @@ export default function SubtugasRow({ subtugas, role, onChanged, users = [] }) {
       formData.append('deskripsi', editForm.deskripsi)
       formData.append('deadline', editForm.deadline)
 
-      // Kirim array ID anggota
-      assignedArray.forEach((uid) => formData.append('assigned_to', uid))
+      // PERBAIKAN UTAMA: Kirim array ID anggota sebagai String JSON agar diterima utuh oleh backend
+      formData.append('assigned_to', JSON.stringify(assignedArray))
 
       editFiles.forEach((f) => formData.append('files', f))
 

@@ -51,6 +51,9 @@ export default function TugasDetailView({ basePath, role: propRole }) {
   const [deleting, setDeleting] = useState(false)
   const [deleteError, setDeleteError] = useState('')
 
+  // State pendukung untuk memuat seluruh daftar pengguna sistem
+  const [allUsersList, setAllUsersList] = useState([])
+
   // LOGIKA AKSES
   const isTugasUmum = tugas && tugas.team_id === null;
   
@@ -64,27 +67,32 @@ export default function TugasDetailView({ basePath, role: propRole }) {
   function load() {
     api.get(`/tugas/${id}`).then((res) => setTugas(res.data))
     api.get('/comments', { params: { tugas_id: id } }).then((res) => setComments(res.data))
+    // Ambil daftar pengguna lengkap agar Anggota bisa memilih pelaksana pada Tugas Umum
+    api.get('/users-lite').then((res) => setAllUsersList(res.data || [])).catch(() => {})
   }
 
   useAutoRefresh(load, [id])
 
-  // LOGIKA ANGGOTA & KATIM (Tugas Tim vs Tugas Umum):
+  // LOGIKA ANGGOTA TIM (Tugas Tim vs Tugas Umum):
   const availableUsers = useMemo(() => {
     if (!tugas) return [];
 
     // 1. TUGAS UMUM (tanpa tim): Tampilkan seluruh daftar pegawai di sistem
     if (isTugasUmum || !tugas.team_id || !tugas.team) {
-      return tugas.all_users || [];
+      return tugas.all_users?.length ? tugas.all_users : allUsersList;
     }
 
-    // 2. TUGAS TIM: Jika Katim membuka halaman, prioritaskan my_team_members
-    if (activeRole === 'katim' && tugas.my_team_members?.length) {
-      return tugas.my_team_members;
+    // 2. TUGAS TIM: Gabungkan tim, my_team_members, atau fallback ke allUsersList
+    let usersList = [];
+    if (tugas.team?.members?.length) {
+      usersList = [...tugas.team.members];
+    } else if (tugas.my_team_members?.length) {
+      usersList = [...tugas.my_team_members];
+    } else {
+      usersList = [...allUsersList];
     }
 
-    // 3. TUGAS TIM Biasa: Ambil anggota tim + Katim
-    let usersList = [...(tugas.team.members || [])];
-    if (tugas.team.katim && !usersList.some((m) => m.id === tugas.team.katim.id)) {
+    if (tugas.team?.katim && !usersList.some((m) => m.id === tugas.team.katim.id)) {
       usersList.unshift({
         id: tugas.team.katim.id,
         name: `${tugas.team.katim.name} (Katim)`,
@@ -92,7 +100,7 @@ export default function TugasDetailView({ basePath, role: propRole }) {
     }
 
     return usersList;
-  }, [tugas, activeRole, isTugasUmum]);
+  }, [tugas, activeRole, isTugasUmum, allUsersList]);
 
   // Menggunakan FormData untuk mendukung Upload File Multi & Array Multi-Assignee
   async function handleAddSubtugas(e) {
@@ -118,8 +126,8 @@ export default function TugasDetailView({ basePath, role: propRole }) {
       formData.append('deskripsi', form.deskripsi || '');
       formData.append('deadline', form.deadline);
       
-      // Kirim array assigned_to ke FormData
-      assignedArray.forEach((uid) => formData.append('assigned_to', uid));
+      // PERBAIKAN: Kirim array assigned_to sebagai String JSON agar dibaca utuh di backend
+      formData.append('assigned_to', JSON.stringify(assignedArray));
       
       subtugasFiles.forEach((f) => formData.append('files', f));
 

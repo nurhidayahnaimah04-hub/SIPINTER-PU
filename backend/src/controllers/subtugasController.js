@@ -5,6 +5,26 @@ import * as NotificationService from '../services/notificationService.js';
 import { recalculateProgress } from '../utils/tugasHelper.js';
 import { classifyFileType, uploadToSupabase, fileUrl } from '../middleware/upload.js';
 
+// HELPER: Parser tangguh untuk mengekstrak seluruh ID anggota (Multi-Assignee)
+function parseAssignees(input) {
+  if (!input) return [];
+  if (Array.isArray(input)) {
+    return input.map(Number).filter(Boolean);
+  }
+  if (typeof input === 'string') {
+    // Jika dikirim sebagai JSON String dari FormData (misal: "[1,2,3]")
+    if (input.startsWith('[')) {
+      try {
+        const parsed = JSON.parse(input);
+        if (Array.isArray(parsed)) return parsed.map(Number).filter(Boolean);
+      } catch (e) {}
+    }
+    // Jika dikirim dipisah koma (misal: "1,2,3")
+    return input.split(',').map(Number).filter(Boolean);
+  }
+  return [Number(input)].filter(Boolean);
+}
+
 export async function index(req, res) {
   const user = req.user;
   const { periode_id: periodeId, semester } = await Semester.fromRequest(req);
@@ -142,7 +162,7 @@ export async function show(req, res) {
 
 export async function store(req, res) {
   const tugasId = req.params.tugas;
-  const { judul, deskripsi = null, assigned_to, deadline } = req.body || {};
+  const { judul, deskripsi = null, deadline } = req.body || {};
 
   // Otorisasi role: Kasubag, Katim, Anggota, & Kabalai diperbolehkan membuat subtugas
   const allowedRoles = ['kasubag', 'katim', 'anggota', 'kabalai'];
@@ -150,15 +170,8 @@ export async function store(req, res) {
     return res.status(403).json({ message: 'Anda tidak memiliki hak akses untuk menambahkan subtugas.' });
   }
 
-  // Parsing assigned_to (Multi-Assignee dari JSON maupun FormData)
-  let assigneesList = [];
-  if (Array.isArray(assigned_to)) {
-    assigneesList = assigned_to.map(Number).filter(Boolean);
-  } else if (typeof assigned_to === 'string') {
-    assigneesList = assigned_to.split(',').map(Number).filter(Boolean);
-  } else if (assigned_to) {
-    assigneesList = [Number(assigned_to)].filter(Boolean);
-  }
+  // Parsing assigned_to secara tangguh
+  const assigneesList = parseAssignees(req.body?.assigned_to);
 
   if (!judul || assigneesList.length === 0 || !deadline) {
     return res.status(422).json({ message: 'Data subtugas tidak lengkap (judul, pelaksana, dan deadline wajib diisi).' });
@@ -175,6 +188,7 @@ export async function store(req, res) {
     const subtugas = rows[0];
 
     // Simpan semua anggota ke tabel perantara subtugas_assignees
+    await pool.query(`DELETE FROM subtugas_assignees WHERE subtugas_id = $1`, [subtugas.id]);
     for (const uid of assigneesList) {
       await pool.query(
         `INSERT INTO subtugas_assignees (subtugas_id, user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
@@ -213,16 +227,23 @@ export async function store(req, res) {
 
     await ActivityLog.catat(req.user.id, `membuat subtugas ${subtugas.judul}`, 'subtugas', subtugas.id);
 
-    const { rows: assigneeRows } = await pool.query(
-      `SELECT u.id, u.name FROM subtugas_assignees sa JOIN users u ON u.id = sa.user_id WHERE sa.subtugas_id = $1`,
+    // Ambil data fresh beserta SELURUH array assignees untuk dikembalikan ke frontend
+    const { rows: freshRows } = await pool.query(
+      `SELECT s.*,
+          COALESCE(
+            (
+              SELECT json_agg(json_build_object('id', u.id, 'name', u.name))
+              FROM subtugas_assignees sa
+              JOIN users u ON u.id = sa.user_id
+              WHERE sa.subtugas_id = s.id
+            ),
+            '[]'::json
+          ) AS assignees
+       FROM subtugas s WHERE s.id = $1`,
       [subtugas.id]
     );
 
-    return res.status(201).json({ 
-      ...subtugas, 
-      assignee: assigneeRows[0] || null,
-      assignees: assigneeRows 
-    });
+    return res.status(201).json(freshRows[0]);
   } catch (error) {
     return res.status(500).json({ message: "Gagal membuat subtugas: " + error.message });
   }
@@ -230,14 +251,14 @@ export async function store(req, res) {
 
 export async function update(req, res) {
   const subtugasId = req.params.subtugas;
-  const { judul, deskripsi, assigned_to, deadline } = req.body || {};
+  const { judul, deskripsi, deadline } = req.body || {};
 
   try {
     const { rows: currentRows } = await pool.query(`SELECT * FROM subtugas WHERE id = $1`, [subtugasId]);
     if (!currentRows.length) return res.status(404).json({ message: 'Subtugas tidak ditemukan.' });
     const current = currentRows[0];
 
-    // OTORISASI DIPERBAIKI: Mengizinkan Kasubag, Katim, Anggota, & Kabalai mengedit subtugas
+    // OTORISASI: Mengizinkan Kasubag, Katim, Anggota, & Kabalai mengedit subtugas
     const allowedRoles = ['kasubag', 'katim', 'anggota', 'kabalai'];
     if (!allowedRoles.includes(req.user.role) && current.created_by !== req.user.id) {
       return res.status(403).json({ message: 'Anda tidak memiliki hak akses untuk mengubah subtugas ini.' });
@@ -254,14 +275,8 @@ export async function update(req, res) {
 
     // Parsing assigned_to untuk Update Multi-Assignee
     let assigneesList = [];
-    if (typeof assigned_to !== 'undefined') {
-      if (Array.isArray(assigned_to)) {
-        assigneesList = assigned_to.map(Number).filter(Boolean);
-      } else if (typeof assigned_to === 'string') {
-        assigneesList = assigned_to.split(',').map(Number).filter(Boolean);
-      } else if (assigned_to) {
-        assigneesList = [Number(assigned_to)].filter(Boolean);
-      }
+    if (typeof req.body?.assigned_to !== 'undefined') {
+      assigneesList = parseAssignees(req.body.assigned_to);
       fields.assigned_to = assigneesList[0] || null;
     }
 
@@ -282,7 +297,7 @@ export async function update(req, res) {
     }
 
     // Update relasi pelaksana di tabel perantara subtugas_assignees
-    if (typeof assigned_to !== 'undefined') {
+    if (typeof req.body?.assigned_to !== 'undefined') {
       await pool.query(`DELETE FROM subtugas_assignees WHERE subtugas_id = $1`, [subtugasId]);
       for (const uid of assigneesList) {
         await pool.query(
