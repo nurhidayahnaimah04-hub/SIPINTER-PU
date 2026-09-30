@@ -40,7 +40,14 @@ export async function index(req, res) {
   } else if (user.role === 'anggota') {
     params.push(user.id);
     conditions.push(`(
-      EXISTS (SELECT 1 FROM subtugas s3 WHERE s3.tugas_id = t.id AND s3.assigned_to = $${params.length})
+      EXISTS (
+        SELECT 1 FROM subtugas s3 
+        WHERE s3.tugas_id = t.id AND (
+          s3.assigned_to = $${params.length} OR EXISTS (
+            SELECT 1 FROM subtugas_assignees sa3 WHERE sa3.subtugas_id = s3.id AND sa3.user_id = $${params.length}
+          )
+        )
+      )
       OR EXISTS (
         SELECT 1 FROM team_members tm_mem 
         WHERE tm_mem.team_id = t.team_id AND tm_mem.user_id = $${params.length}
@@ -250,14 +257,24 @@ export async function show(req, res) {
     tugas.my_team_members = myTeamRows[0]?.members || [];
   }
 
+  // PERBAIKAN UTAMA: Mengambil relasi Multi-Assignee dari tabel subtugas_assignees
   const { rows: subtugasRows } = await pool.query(
     `SELECT s.*,
         (s.verifikasi_katim_status = 'disetujui' OR s.verifikasi_kasubag_status = 'disetujui') AS locked,
         json_build_object('id', a.id, 'name', a.name, 'jabatan', a.jabatan, 'foto', a.foto) AS assignee,
+        COALESCE(
+          (
+            SELECT json_agg(json_build_object('id', u.id, 'name', u.name, 'jabatan', u.jabatan, 'foto', u.foto))
+            FROM subtugas_assignees sa
+            JOIN users u ON u.id = sa.user_id
+            WHERE sa.subtugas_id = s.id
+          ),
+          '[]'::json
+        ) AS assignees,
         CASE WHEN vk.id IS NOT NULL THEN json_build_object('id', vk.id, 'name', vk.name) ELSE NULL END AS "verifikatorKatim",
         CASE WHEN vs.id IS NOT NULL THEN json_build_object('id', vs.id, 'name', vs.name) ELSE NULL END AS "verifikatorKasubag"
      FROM subtugas s
-     JOIN users a ON a.id = s.assigned_to
+     LEFT JOIN users a ON a.id = s.assigned_to
      LEFT JOIN users vk ON vk.id = s.verifikasi_katim_by
      LEFT JOIN users vs ON vs.id = s.verifikasi_kasubag_by
      WHERE s.tugas_id = $1
