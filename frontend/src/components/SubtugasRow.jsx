@@ -12,6 +12,9 @@ export default function SubtugasRow({ subtugas, role, onChanged, users = [] }) {
   const [commentText, setCommentText] = useState('')
   const [sendingComment, setSendingComment] = useState(false)
   
+  // State fallback untuk memastikan daftar user selalu ada (khususnya pada Tugas Umum)
+  const [fallbackUsers, setFallbackUsers] = useState([])
+
   const [editOpen, setEditOpen] = useState(false)
   // State assigned_to berbentuk Array untuk menampung banyak ID anggota
   const [editForm, setEditForm] = useState({ judul: '', deskripsi: '', assigned_to: [], deadline: '' })
@@ -28,6 +31,16 @@ export default function SubtugasRow({ subtugas, role, onChanged, users = [] }) {
   
   // Membuka izin edit & kelola subtugas untuk role 'anggota'
   const canManageSubtugas = ['kasubag', 'katim', 'anggota', 'kabalai'].includes(role)
+
+  // Ambil daftar seluruh pegawai jika prop users kosong (misal pada Tugas Umum)
+  useEffect(() => {
+    if (!users || users.length === 0) {
+      api.get('/users-lite').then((res) => setFallbackUsers(res.data || [])).catch(() => {})
+    }
+  }, [users])
+
+  // Gabungkan sumber user dari prop atau fallback
+  const availableUsersList = users && users.length > 0 ? users : fallbackUsers;
 
   // Gabungkan file dari skema baru dan lama untuk ditampilkan di Detail & Modal Edit
   const oldSystemFiles = subtugas.updates
@@ -117,7 +130,7 @@ export default function SubtugasRow({ subtugas, role, onChanged, users = [] }) {
       formData.append('deskripsi', editForm.deskripsi)
       formData.append('deadline', editForm.deadline)
 
-      // PERBAIKAN UTAMA: Kirim array ID anggota sebagai String JSON agar diterima utuh oleh backend
+      // Kirim array ID anggota sebagai String JSON agar diterima utuh oleh backend
       formData.append('assigned_to', JSON.stringify(assignedArray))
 
       editFiles.forEach((f) => formData.append('files', f))
@@ -369,31 +382,31 @@ export default function SubtugasRow({ subtugas, role, onChanged, users = [] }) {
               </label>
             </div>
 
-            {/* Checklist Multi-Select Anggota Tim pada Modal Edit */}
+            {/* Checklist Multi-Select Anggota Tim pada Modal Edit dengan Fallback List */}
             <div>
               <div className="flex justify-between items-center mb-1">
                 <label className="label mb-0">Anggota Tim Pelaksana</label>
-                {users.length > 0 && (
+                {availableUsersList.length > 0 && (
                   <button
                     type="button"
                     className="text-xs text-brand-600 font-semibold hover:underline"
                     onClick={() => {
                       const currentArray = Array.isArray(editForm.assigned_to) ? editForm.assigned_to : [];
-                      if (currentArray.length === users.length) {
+                      if (currentArray.length === availableUsersList.length) {
                         setEditForm({ ...editForm, assigned_to: [] });
                       } else {
-                        setEditForm({ ...editForm, assigned_to: users.map((u) => u.id) });
+                        setEditForm({ ...editForm, assigned_to: availableUsersList.map((u) => u.id) });
                       }
                     }}
                   >
-                    {Array.isArray(editForm.assigned_to) && editForm.assigned_to.length === users.length ? 'Batal Semua' : 'Pilih Semua'}
+                    {Array.isArray(editForm.assigned_to) && editForm.assigned_to.length === availableUsersList.length ? 'Batal Semua' : 'Pilih Semua'}
                   </button>
                 )}
               </div>
 
               <div className="max-h-48 overflow-y-auto rounded-lg border border-gray-300 bg-white p-2.5 shadow-sm space-y-1">
-                {users && users.length > 0 ? (
-                  users.map((u) => {
+                {availableUsersList && availableUsersList.length > 0 ? (
+                  availableUsersList.map((u) => {
                     const isChecked = Array.isArray(editForm.assigned_to) && editForm.assigned_to.includes(u.id);
 
                     return (

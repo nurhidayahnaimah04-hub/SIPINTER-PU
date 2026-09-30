@@ -110,6 +110,27 @@ export async function store(req, res) {
     );
   }
 
+  // --- INTEGRASI NOTIFIKASI SHARED PROGRESS KE REKAN PELAKSANA LAINNYA ---
+  try {
+    const { rows: otherAssignees } = await pool.query(
+      `SELECT user_id FROM subtugas_assignees WHERE subtugas_id = $1 AND user_id != $2`,
+      [subtugasId, user.id]
+    );
+    
+    if (otherAssignees.length > 0) {
+      const recipientIds = otherAssignees.map(a => a.user_id);
+      await NotificationService.kirimKeBanyak(
+        recipientIds,
+        'Pembaruan Progres Subtugas',
+        `${user.name} memperbarui progres subtugas '${subtugas.judul}' menjadi ${persentase}%`,
+        `/anggota/tugas/${subtugas.tugas_id}`
+      );
+    }
+  } catch (err) {
+    // Tangani atau abaikan jika pengiriman notifikasi massal menemui kendala jaringan/database
+  }
+  // ---------------------------------------------------------------------
+
   await ActivityLog.catat(
     user.id,
     `update progres subtugas ${subtugas.judul} (${persentase}%)`,
