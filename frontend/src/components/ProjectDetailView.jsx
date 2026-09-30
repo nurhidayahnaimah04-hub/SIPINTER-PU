@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import api from '../lib/api'
 import ProgressBar from './ProgressBar'
@@ -6,12 +6,13 @@ import Modal from './Modal'
 import Loading from './Loading'
 import EmptyState from './EmptyState'
 import { formatDate, statusBadgeClass, priorityClass, priorityLabel } from '../lib/helpers'
+import { useAuth } from '../context/AuthContext'
 import { ArrowLeft, Plus, MessageSquare, Paperclip, CheckCircle2, XCircle, Send } from 'lucide-react'
 
-export default function ProjectDetailView({ basePath, canAddSubtask, canApproveProject }) {
+export default function ProjectDetailView({ basePath, canAddSubtask: propsCanAddSubtask, canApproveProject }) {
   const { id } = useParams()
+  const { user } = useAuth()
   const [project, setProject] = useState(null)
-  const [users, setUsers] = useState([])
   const [subtaskOpen, setSubtaskOpen] = useState(false)
   
   // State form bersih tanpa bobot
@@ -29,11 +30,34 @@ export default function ProjectDetailView({ basePath, canAddSubtask, canApproveP
 
   useEffect(() => { load() }, [id])
 
-  useEffect(() => {
-    if (project?.team) {
-      setUsers(project.team.members || [])
+  // PERBAIKAN 1: Pengambilan Daftar Anggota secara Dinamis
+  const availableUsers = useMemo(() => {
+    if (!project) return [];
+
+    // Jika Tugas Umum (tanpa tim), ambil seluruh pengguna sistem
+    if (!project.team_id || !project.team) {
+      return project.all_users || [];
     }
-  }, [project])
+
+    // Jika Katim/Anggota dikirimkan my_team_members
+    if (project.my_team_members?.length) {
+      return project.my_team_members;
+    }
+
+    // Ambil dari daftar anggota tim
+    let usersList = [...(project.team.members || [])];
+    if (project.team.katim && !usersList.some((m) => m.id === project.team.katim.id)) {
+      usersList.unshift({
+        id: project.team.katim.id,
+        name: `${project.team.katim.name} (Katim)`,
+      });
+    }
+
+    return usersList;
+  }, [project]);
+
+  // PERBAIKAN 2: Otorisasi Mandiri (Anggota, Katim, Kasubag, Kabalai)
+  const canAddSubtask = propsCanAddSubtask || ['kasubag', 'katim', 'anggota', 'kabalai'].includes(user?.role);
 
   async function handleAddSubtask(e) {
     e.preventDefault()
@@ -94,7 +118,7 @@ export default function ProjectDetailView({ basePath, canAddSubtask, canApproveP
         <div className="flex items-start justify-between gap-3 flex-wrap">
           <div>
             <h1 className="text-xl font-semibold text-gray-900">{project.judul}</h1>
-            <p className="text-sm text-gray-500 mt-1">Tim: {project.team?.nama_tim} · Katim: {project.team?.katim?.name}</p>
+            <p className="text-sm text-gray-500 mt-1">Tim: {project.team?.nama_tim || 'Tugas Umum'} {project.team?.katim?.name ? `· Katim: ${project.team.katim.name}` : ''}</p>
           </div>
           <div className="flex items-center gap-2">
             <span className={`badge ${priorityClass(project.priority)}`}>{priorityLabel(project.priority)}</span>
@@ -197,27 +221,27 @@ export default function ProjectDetailView({ basePath, canAddSubtask, canApproveP
           <div>
             <div className="flex justify-between items-center mb-1">
               <label className="label mb-0">Anggota Tim (Bisa pilih lebih dari 1)</label>
-              {users.length > 0 && (
+              {availableUsers.length > 0 && (
                 <button
                   type="button"
                   className="text-xs text-brand-600 font-semibold hover:underline"
                   onClick={() => {
                     const currentArray = Array.isArray(form.assigned_to) ? form.assigned_to : [];
-                    if (currentArray.length === users.length) {
+                    if (currentArray.length === availableUsers.length) {
                       setForm({ ...form, assigned_to: [] });
                     } else {
-                      setForm({ ...form, assigned_to: users.map((u) => u.id) });
+                      setForm({ ...form, assigned_to: availableUsers.map((u) => u.id) });
                     }
                   }}
                 >
-                  {Array.isArray(form.assigned_to) && form.assigned_to.length === users.length ? 'Batal Semua' : 'Pilih Semua'}
+                  {Array.isArray(form.assigned_to) && form.assigned_to.length === availableUsers.length ? 'Batal Semua' : 'Pilih Semua'}
                 </button>
               )}
             </div>
 
             <div className="max-h-48 overflow-y-auto rounded-lg border border-gray-300 bg-white p-2.5 shadow-sm space-y-1">
-              {users && users.length > 0 ? (
-                users.map((u) => {
+              {availableUsers && availableUsers.length > 0 ? (
+                availableUsers.map((u) => {
                   const isChecked = Array.isArray(form.assigned_to) && form.assigned_to.includes(u.id);
 
                   return (
