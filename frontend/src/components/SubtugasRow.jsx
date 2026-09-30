@@ -13,7 +13,8 @@ export default function SubtugasRow({ subtugas, role, onChanged, users = [] }) {
   const [sendingComment, setSendingComment] = useState(false)
   
   const [editOpen, setEditOpen] = useState(false)
-  const [editForm, setEditForm] = useState({ judul: '', deskripsi: '', assigned_to: '', deadline: '' })
+  // State assigned_to berbentuk Array untuk menampung banyak ID anggota
+  const [editForm, setEditForm] = useState({ judul: '', deskripsi: '', assigned_to: [], deadline: '' })
   const [editSaving, setEditSaving] = useState(false)
   const [editError, setEditError] = useState('')
   const [editFiles, setEditFiles] = useState([]) 
@@ -71,10 +72,20 @@ export default function SubtugasRow({ subtugas, role, onChanged, users = [] }) {
   }
 
   function openEdit() {
+    // Ambil daftar ID dari subtugas.assignees jika ada, atau fallback ke assigned_to
+    let initialAssignees = [];
+    if (subtugas.assignees && subtugas.assignees.length > 0) {
+      initialAssignees = subtugas.assignees.map(a => a.id);
+    } else if (subtugas.assigned_to) {
+      initialAssignees = [subtugas.assigned_to];
+    } else if (subtugas.assignee?.id) {
+      initialAssignees = [subtugas.assignee.id];
+    }
+
     setEditForm({
       judul: subtugas.judul,
       deskripsi: subtugas.deskripsi || '',
-      assigned_to: subtugas.assigned_to || subtugas.assignee?.id || '',
+      assigned_to: initialAssignees,
       deadline: (subtugas.deadline || '').slice(0, 10),
     })
     setEditFiles([]) 
@@ -84,18 +95,28 @@ export default function SubtugasRow({ subtugas, role, onChanged, users = [] }) {
 
   async function handleEdit(e) {
     e.preventDefault()
+    
+    const assignedArray = Array.isArray(editForm.assigned_to) ? editForm.assigned_to : [];
+    if (assignedArray.length === 0) {
+      setEditError('Pilih minimal 1 anggota tim pelaksana.')
+      return
+    }
+
     if (!editForm.deadline) {
       setEditError('Tanggal deadline wajib diisi.')
       return
     }
+
     setEditSaving(true)
     setEditError('')
     try {
       const formData = new FormData()
       formData.append('judul', editForm.judul)
       formData.append('deskripsi', editForm.deskripsi)
-      formData.append('assigned_to', editForm.assigned_to)
       formData.append('deadline', editForm.deadline)
+
+      // Kirim array ID anggota
+      assignedArray.forEach((uid) => formData.append('assigned_to', uid))
 
       editFiles.forEach((f) => formData.append('files', f))
 
@@ -141,6 +162,11 @@ export default function SubtugasRow({ subtugas, role, onChanged, users = [] }) {
     }
   }
 
+  // Formatting gabungan nama pelaksana (Multi-Assignee)
+  const displayAssignees = subtugas.assignees && subtugas.assignees.length > 0
+    ? subtugas.assignees.map(a => a.name).join(', ')
+    : (subtugas.assignee?.name || 'Belum ada pelaksana');
+
   return (
     <div className="card p-4">
       <div className="flex items-start justify-between gap-2 flex-wrap">
@@ -149,8 +175,11 @@ export default function SubtugasRow({ subtugas, role, onChanged, users = [] }) {
             {subtugas.judul}
             {subtugas.locked && <Lock size={13} className="text-gray-400" />}
           </p>
+          
+          {/* Menampilkan semua nama anggota yang dicentang */}
           <p className="text-xs text-gray-500 mt-1 mb-2">
-            {subtugas.assignee?.name}{subtugas.deadline ? ` · Deadline ${formatDate(subtugas.deadline)}` : ''}
+            <span className="font-medium text-gray-700">{displayAssignees}</span>
+            {subtugas.deadline ? ` · Deadline ${formatDate(subtugas.deadline)}` : ''}
           </p>
 
           {/* Menampilkan Deskripsi Subtugas */}
@@ -192,14 +221,14 @@ export default function SubtugasRow({ subtugas, role, onChanged, users = [] }) {
 
       <div className="mt-2"><ProgressBar value={subtugas.progress} /></div>
 
-      {/* Render riwayat update dari Anggota saja (tanpa system note) */}
+      {/* Render riwayat update dari Anggota */}
       {visibleUpdates.length > 0 && (
         <div className="mt-2 bg-gray-50 rounded-lg p-3 text-sm">
           <div className="mt-2 space-y-2">
             {visibleUpdates.map((u) => (
               <div key={u.id} className="bg-gray-50 rounded-lg p-3 text-sm border border-gray-100">
                 <div className="flex justify-between text-xs text-gray-400 mb-1">
-                  <span>{u.persentase}%</span>
+                  <span>Progres {u.persentase}% {u.user?.name ? `oleh ${u.user.name}` : ''}</span>
                   <span>{formatDate(u.created_at)}</span>
                 </div>
                 <p className="text-gray-600">{u.catatan || 'Tidak ada catatan dari anggota.'}</p>
@@ -324,31 +353,78 @@ export default function SubtugasRow({ subtugas, role, onChanged, users = [] }) {
                     const selectedFiles = Array.from(e.target.files);
                     const MAX_SIZE = 5 * 1024 * 1024; // 5 MB dalam Bytes
 
-                    // Cek apakah ada file yang ukurannya melebihi 5 MB
                     const isOverSize = selectedFiles.some((file) => file.size > MAX_SIZE);
 
                     if (isOverSize) {
                       alert("Ada file yang ukurannya melebihi 5 MB! Harap pilih file yang lebih kecil.");
-                      e.target.value = ""; // Batalkan pilihan file
+                      e.target.value = "";
                       return;
                     }
 
-                    // Jika semua file <= 5 MB, simpan file seperti biasa
                     setEditFiles(selectedFiles);
                   }}
                 />
               </label>
             </div>
 
+            {/* Checklist Multi-Select Anggota Tim pada Modal Edit */}
             <div>
-              <label className="label">Assign ke Anggota</label>
-              <select required className="input" value={editForm.assigned_to} onChange={(e) => setEditForm({ ...editForm, assigned_to: e.target.value })}>
-                <option value="">Pilih anggota...</option>
-                {users.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
-                {editForm.assigned_to && !users.some((u) => String(u.id) === String(editForm.assigned_to)) && subtugas.assignee && (
-                  <option value={subtugas.assignee.id}>{subtugas.assignee.name}</option>
+              <div className="flex justify-between items-center mb-1">
+                <label className="label mb-0">Anggota Tim Pelaksana</label>
+                {users.length > 0 && (
+                  <button
+                    type="button"
+                    className="text-xs text-brand-600 font-semibold hover:underline"
+                    onClick={() => {
+                      const currentArray = Array.isArray(editForm.assigned_to) ? editForm.assigned_to : [];
+                      if (currentArray.length === users.length) {
+                        setEditForm({ ...editForm, assigned_to: [] });
+                      } else {
+                        setEditForm({ ...editForm, assigned_to: users.map((u) => u.id) });
+                      }
+                    }}
+                  >
+                    {Array.isArray(editForm.assigned_to) && editForm.assigned_to.length === users.length ? 'Batal Semua' : 'Pilih Semua'}
+                  </button>
                 )}
-              </select>
+              </div>
+
+              <div className="max-h-48 overflow-y-auto rounded-lg border border-gray-300 bg-white p-2.5 shadow-sm space-y-1">
+                {users && users.length > 0 ? (
+                  users.map((u) => {
+                    const isChecked = Array.isArray(editForm.assigned_to) && editForm.assigned_to.includes(u.id);
+
+                    return (
+                      <label
+                        key={u.id}
+                        className={`flex items-center gap-3 p-2 rounded-md transition cursor-pointer select-none ${
+                          isChecked ? 'bg-blue-50 text-blue-900 font-medium' : 'hover:bg-gray-50 text-gray-700'
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                          checked={isChecked}
+                          onChange={(e) => {
+                            const currentList = Array.isArray(editForm.assigned_to) ? editForm.assigned_to : [];
+                            if (e.target.checked) {
+                              setEditForm({ ...editForm, assigned_to: [...currentList, u.id] });
+                            } else {
+                              setEditForm({ ...editForm, assigned_to: currentList.filter((id) => id !== u.id) });
+                            }
+                          }}
+                        />
+                        <span className="text-sm">{u.name}</span>
+                      </label>
+                    );
+                  })
+                ) : (
+                  <p className="text-xs text-gray-500 italic p-2">Tidak ada anggota tim tersedia.</p>
+                )}
+              </div>
+              <p className="mt-1 text-xs text-gray-500">
+                Terpilih: <span className="font-bold text-blue-600">{Array.isArray(editForm.assigned_to) ? editForm.assigned_to.length : 0}</span> orang
+              </p>
             </div>
             
             <div>
@@ -375,7 +451,7 @@ export default function SubtugasRow({ subtugas, role, onChanged, users = [] }) {
               <AlertTriangle size={18} className="flex-shrink-0 mt-0.5" />
               <p className="text-sm">
                 Yakin ingin menghapus subtugas <span className="font-semibold">"{subtugas.judul}"</span>?
-                Tindakan ini tidak bisa dibatalkan.
+                Tindakan me-reset ini tidak bisa dibatalkan.
               </p>
             </div>
             <div className="flex justify-end gap-2">

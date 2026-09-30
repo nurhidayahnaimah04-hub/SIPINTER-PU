@@ -12,7 +12,7 @@ import { formatDate, statusBadgeClass } from '../lib/helpers'
 import { usePeriode } from '../context/PeriodeContext'
 import { ArrowLeft, Plus, MessageSquare, CheckCircle2, XCircle, Copy, Pencil, Trash2, AlertTriangle, UploadCloud } from 'lucide-react'
 
-// role: 'kabalai' | 'kasubag' | 'katim'
+// role: 'kabalai' | 'kasubag' | 'katim' | 'anggota'
 export default function TugasDetailView({ basePath, role }) {
   const { id } = useParams()
   const { user } = useAuth()
@@ -20,7 +20,8 @@ export default function TugasDetailView({ basePath, role }) {
   const [tugas, setTugas] = useState(null)
 
   const [subtugasOpen, setSubtugasOpen] = useState(false)
-  const [form, setForm] = useState({ judul: '', deskripsi: '', assigned_to: '', deadline: '' })
+  // Fitur 1: Inisialisasi assigned_to dalam bentuk Array untuk Multi-Assignee
+  const [form, setForm] = useState({ judul: '', deskripsi: '', assigned_to: [], deadline: '' })
   
   // State untuk menyimpan daftar file yang akan diupload saat buat subtugas
   const [subtugasFiles, setSubtugasFiles] = useState([])
@@ -49,8 +50,8 @@ export default function TugasDetailView({ basePath, role }) {
 
   // LOGIKA AKSES
   const isTugasUmum = tugas && tugas.team_id === null;
-  // Jika Tugas Umum, HANYA katim yang bisa buat subtugas. Jika tugas biasa, katim/kasubag bisa.
-  const canCreateSubtugas = tugas && (isTugasUmum ? role === 'katim' : (role === 'katim' || role === 'kasubag'));
+  // Fitur 2: Anggota juga bisa menambah subtugas
+  const canCreateSubtugas = tugas && (isTugasUmum ? (role === 'katim' || role === 'anggota') : (role === 'katim' || role === 'kasubag' || role === 'anggota'));
   
   const canVerifikasiTugas = role === 'kasubag'
   const canDuplicate = role === 'kasubag'
@@ -63,7 +64,7 @@ export default function TugasDetailView({ basePath, role }) {
 
   useAutoRefresh(load, [id])
 
-// LOGIKA ANGGOTA & KATIM (MULTI-ROLE):
+  // LOGIKA ANGGOTA & KATIM (MULTI-ROLE):
   const availableUsers = useMemo(() => {
     if (!tugas) return [];
 
@@ -90,21 +91,32 @@ export default function TugasDetailView({ basePath, role }) {
     return usersList;
   }, [tugas, role]);
 
-  // Menggunakan FormData untuk mendukung Upload File Multi
+  // Menggunakan FormData untuk mendukung Upload File Multi & Array Multi-Assignee
   async function handleAddSubtugas(e) {
     e.preventDefault()
+    
+    // Validasi input multi-assignee
+    const assignedArray = Array.isArray(form.assigned_to) ? form.assigned_to : [];
+    if (assignedArray.length === 0) {
+      setSubtugasError('Pilih minimal 1 anggota tim pelaksana.')
+      return
+    }
+
     if (!form.deadline) {
       setSubtugasError('Tanggal deadline wajib diisi.')
       return
     }
+
     setSaving(true)
     setSubtugasError('')
     try {
       const formData = new FormData();
       formData.append('judul', form.judul);
       formData.append('deskripsi', form.deskripsi);
-      formData.append('assigned_to', form.assigned_to);
       formData.append('deadline', form.deadline);
+      
+      // Kirim array assigned_to ke FormData
+      assignedArray.forEach((uid) => formData.append('assigned_to', uid));
       
       subtugasFiles.forEach((f) => formData.append('files', f));
 
@@ -113,7 +125,7 @@ export default function TugasDetailView({ basePath, role }) {
       })
       
       setSubtugasOpen(false)
-      setForm({ judul: '', deskripsi: '', assigned_to: '', deadline: '' })
+      setForm({ judul: '', deskripsi: '', assigned_to: [], deadline: '' })
       setSubtugasFiles([]) // Bersihkan form file setelah berhasil
       load()
     } catch (err) {
@@ -291,7 +303,7 @@ export default function TugasDetailView({ basePath, role }) {
         </div>
       )}
 
-      <Modal open={subtugasOpen} onClose={() => { setSubtugasOpen(false); setSubtugasFiles([]); }} title={<span className="inline-block -mx-6 -mt-6 mb-2 px-6 py-4 bg-pupr-yellow text-pupr-blue-dark font-semibold rounded-t-xl w-[calc(100%+3rem)]">Tambah Subtugas</span>}>
+      <Modal open={subtugasOpen} onClose={() => { setSubtugasOpen(false); setSubtugasFiles([]); setForm({ judul: '', deskripsi: '', assigned_to: [], deadline: '' }); }} title={<span className="inline-block -mx-6 -mt-6 mb-2 px-6 py-4 bg-pupr-yellow text-pupr-blue-dark font-semibold rounded-t-xl w-[calc(100%+3rem)]">Tambah Subtugas</span>}>
         <form onSubmit={handleAddSubtugas} className="space-y-4">
           {subtugasError && <div className="bg-red-50 text-red-700 text-sm px-3 py-2 rounded-lg">{subtugasError}</div>}
           
@@ -333,29 +345,80 @@ export default function TugasDetailView({ basePath, role }) {
                   const selectedFiles = Array.from(e.target.files);
                   const MAX_SIZE = 5 * 1024 * 1024; // Batas 5 MB dalam Byte
 
-                  // Cek apakah ada file yang ukurannya > 5 MB
                   const isOverSize = selectedFiles.some((file) => file.size > MAX_SIZE);
 
                   if (isOverSize) {
                     alert("Ada file yang ukurannya melebihi 5 MB! Harap pilih file yang lebih kecil.");
-                    e.target.value = ""; // Batalkan pilihan file
+                    e.target.value = "";
                     return;
                   }
 
-                  // Jika ukuran file aman (<= 5 MB), simpan file
                   setSubtugasFiles(selectedFiles);
                 }} 
               />
             </label>
           </div>
 
+          {/* FITUR 1: Tampilan UI Checklist Multi-Select Anggota Tim */}
           <div>
-            <label className="label">Assign ke Anggota</label>
-            <select required className="input" value={form.assigned_to} onChange={(e) => setForm({ ...form, assigned_to: e.target.value })}>
-              <option value="">Pilih anggota...</option>
-              {availableUsers.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
-            </select>
+            <div className="flex justify-between items-center mb-1">
+              <label className="label mb-0">Anggota Tim (Bisa pilih lebih dari 1)</label>
+              {availableUsers.length > 0 && (
+                <button
+                  type="button"
+                  className="text-xs text-brand-600 font-semibold hover:underline"
+                  onClick={() => {
+                    const currentArray = Array.isArray(form.assigned_to) ? form.assigned_to : [];
+                    if (currentArray.length === availableUsers.length) {
+                      setForm({ ...form, assigned_to: [] });
+                    } else {
+                      setForm({ ...form, assigned_to: availableUsers.map((u) => u.id) });
+                    }
+                  }}
+                >
+                  {Array.isArray(form.assigned_to) && form.assigned_to.length === availableUsers.length ? 'Batal Semua' : 'Pilih Semua'}
+                </button>
+              )}
+            </div>
+
+            <div className="max-h-48 overflow-y-auto rounded-lg border border-gray-300 bg-white p-2.5 shadow-sm space-y-1">
+              {availableUsers && availableUsers.length > 0 ? (
+                availableUsers.map((userItem) => {
+                  const isChecked = Array.isArray(form.assigned_to) && form.assigned_to.includes(userItem.id);
+
+                  return (
+                    <label
+                      key={userItem.id}
+                      className={`flex items-center gap-3 p-2 rounded-md transition cursor-pointer select-none ${
+                        isChecked ? 'bg-blue-50 text-blue-900 font-medium' : 'hover:bg-gray-50 text-gray-700'
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                        checked={isChecked}
+                        onChange={(e) => {
+                          const currentList = Array.isArray(form.assigned_to) ? form.assigned_to : [];
+                          if (e.target.checked) {
+                            setForm({ ...form, assigned_to: [...currentList, userItem.id] });
+                          } else {
+                            setForm({ ...form, assigned_to: currentList.filter((id) => id !== userItem.id) });
+                          }
+                        }}
+                      />
+                      <span className="text-sm">{userItem.name}</span>
+                    </label>
+                  );
+                })
+              ) : (
+                <p className="text-xs text-gray-500 italic p-2">Tidak ada anggota tim tersedia.</p>
+              )}
+            </div>
+            <p className="mt-1 text-xs text-gray-500">
+              Terpilih: <span className="font-bold text-blue-600">{Array.isArray(form.assigned_to) ? form.assigned_to.length : 0}</span> orang
+            </p>
           </div>
+
           <div>
             <label className="label">Deadline</label>
             <input type="date" required className="input" value={form.deadline} onChange={(e) => setForm({ ...form, deadline: e.target.value })} />
@@ -444,4 +507,4 @@ export default function TugasDetailView({ basePath, role }) {
       </Modal>
     </div>
   )
-} 
+}

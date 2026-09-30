@@ -13,8 +13,11 @@ export default function ProjectDetailView({ basePath, canAddSubtask, canApproveP
   const [project, setProject] = useState(null)
   const [users, setUsers] = useState([])
   const [subtaskOpen, setSubtaskOpen] = useState(false)
-  const [form, setForm] = useState({ judul: '', deskripsi: '', assigned_to: '', bobot: 1, deadline: '' })
+  
+  // State form bersih tanpa bobot
+  const [form, setForm] = useState({ judul: '', deskripsi: '', assigned_to: [], deadline: '' })
   const [saving, setSaving] = useState(false)
+  const [formError, setFormError] = useState('')
   const [comment, setComment] = useState('')
   const [comments, setComments] = useState([])
   const [approveNote, setApproveNote] = useState('')
@@ -34,13 +37,32 @@ export default function ProjectDetailView({ basePath, canAddSubtask, canApproveP
 
   async function handleAddSubtask(e) {
     e.preventDefault()
-    if (!form.deadline) return
+    
+    const assignedArray = Array.isArray(form.assigned_to) ? form.assigned_to : [];
+    if (assignedArray.length === 0) {
+      setFormError('Pilih minimal 1 anggota tim pelaksana.')
+      return
+    }
+
+    if (!form.deadline) {
+      setFormError('Tanggal deadline wajib diisi.')
+      return
+    }
+
     setSaving(true)
+    setFormError('')
     try {
-      await api.post(`/projects/${id}/subtasks`, form)
+      await api.post(`/projects/${id}/subtasks`, {
+        judul: form.judul,
+        deskripsi: form.deskripsi,
+        deadline: form.deadline,
+        assigned_to: assignedArray
+      })
       setSubtaskOpen(false)
-      setForm({ judul: '', deskripsi: '', assigned_to: '', bobot: 1, deadline: '' })
+      setForm({ judul: '', deskripsi: '', assigned_to: [], deadline: '' })
       load()
+    } catch (err) {
+      setFormError(err.response?.data?.message || 'Gagal menambahkan subtask.')
     } finally {
       setSaving(false)
     }
@@ -103,7 +125,7 @@ export default function ProjectDetailView({ basePath, canAddSubtask, canApproveP
       <div className="flex items-center justify-between mb-3">
         <h2 className="font-semibold text-gray-900">Subtask ({project.subtasks?.length || 0})</h2>
         {canAddSubtask && (
-          <button onClick={() => setSubtaskOpen(true)} className="btn btn-secondary text-sm">
+          <button onClick={() => { setFormError(''); setSubtaskOpen(true); }} className="btn btn-secondary text-sm">
             <Plus size={15} /> Tambah Subtask
           </button>
         )}
@@ -111,27 +133,33 @@ export default function ProjectDetailView({ basePath, canAddSubtask, canApproveP
 
       {!project.subtasks?.length ? <EmptyState text="Belum ada subtask." /> : (
         <div className="space-y-3 mb-6">
-          {project.subtasks.map((s) => (
-            <div key={s.id} className="card p-4">
-              <div className="flex items-start justify-between gap-2 flex-wrap">
-                <div>
-                  <p className="font-medium text-gray-900">{s.judul}</p>
-                  <p className="text-xs text-gray-500 mt-0.5">
-                    Ditugaskan ke {s.assignee?.name} · Bobot {s.bobot} · Deadline {formatDate(s.deadline)}
-                  </p>
+          {project.subtasks.map((s) => {
+            const displayAssignees = s.assignees && s.assignees.length > 0
+              ? s.assignees.map(a => a.name).join(', ')
+              : (s.assignee?.name || 'Belum ada pelaksana');
+
+            return (
+              <div key={s.id} className="card p-4">
+                <div className="flex items-start justify-between gap-2 flex-wrap">
+                  <div>
+                    <p className="font-medium text-gray-900">{s.judul}</p>
+                    <p className="text-xs text-gray-500 mt-0.5">
+                      <span className="font-medium text-gray-700">{displayAssignees}</span>{s.deadline ? ` · Deadline ${formatDate(s.deadline)}` : ''}
+                    </p>
+                  </div>
+                  <span className={statusBadgeClass(s.status)}>{s.status}</span>
                 </div>
-                <span className={statusBadgeClass(s.status)}>{s.status}</span>
-              </div>
-              <div className="mt-2">
-                <ProgressBar value={s.progress} />
-              </div>
-              {s.updates?.[0]?.files?.length > 0 && (
-                <div className="flex items-center gap-1 text-xs text-gray-400 mt-2">
-                  <Paperclip size={12} /> {s.updates[0].files.length} bukti terlampir
+                <div className="mt-2">
+                  <ProgressBar value={s.progress} />
                 </div>
-              )}
-            </div>
-          ))}
+                {s.updates?.[0]?.files?.length > 0 && (
+                  <div className="flex items-center gap-1 text-xs text-gray-400 mt-2">
+                    <Paperclip size={12} /> {s.updates[0].files.length} bukti terlampir
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
       )}
 
@@ -152,8 +180,10 @@ export default function ProjectDetailView({ basePath, canAddSubtask, canApproveP
         </form>
       </div>
 
-      <Modal open={subtaskOpen} onClose={() => setSubtaskOpen(false)} title="Tambah Subtask">
+      <Modal open={subtaskOpen} onClose={() => { setSubtaskOpen(false); setForm({ judul: '', deskripsi: '', assigned_to: [], deadline: '' }); }} title="Tambah Subtask">
         <form onSubmit={handleAddSubtask} className="space-y-4">
+          {formError && <div className="bg-red-50 text-red-700 text-sm px-3 py-2 rounded-lg">{formError}</div>}
+          
           <div>
             <label className="label">Judul Subtask</label>
             <input required className="input" value={form.judul} onChange={(e) => setForm({ ...form, judul: e.target.value })} />
@@ -162,23 +192,72 @@ export default function ProjectDetailView({ basePath, canAddSubtask, canApproveP
             <label className="label">Deskripsi</label>
             <textarea className="input" rows={2} value={form.deskripsi} onChange={(e) => setForm({ ...form, deskripsi: e.target.value })} />
           </div>
+
+          {/* Checklist Multi-Select Anggota Tim */}
           <div>
-            <label className="label">Assign ke Anggota</label>
-            <select required className="input" value={form.assigned_to} onChange={(e) => setForm({ ...form, assigned_to: e.target.value })}>
-              <option value="">Pilih anggota...</option>
-              {users.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
-            </select>
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="label">Bobot</label>
-              <input type="number" min="0.1" step="0.1" className="input" value={form.bobot} onChange={(e) => setForm({ ...form, bobot: e.target.value })} />
+            <div className="flex justify-between items-center mb-1">
+              <label className="label mb-0">Anggota Tim (Bisa pilih lebih dari 1)</label>
+              {users.length > 0 && (
+                <button
+                  type="button"
+                  className="text-xs text-brand-600 font-semibold hover:underline"
+                  onClick={() => {
+                    const currentArray = Array.isArray(form.assigned_to) ? form.assigned_to : [];
+                    if (currentArray.length === users.length) {
+                      setForm({ ...form, assigned_to: [] });
+                    } else {
+                      setForm({ ...form, assigned_to: users.map((u) => u.id) });
+                    }
+                  }}
+                >
+                  {Array.isArray(form.assigned_to) && form.assigned_to.length === users.length ? 'Batal Semua' : 'Pilih Semua'}
+                </button>
+              )}
             </div>
-            <div>
-              <label className="label">Deadline</label>
-              <input type="date" required className="input" value={form.deadline} onChange={(e) => setForm({ ...form, deadline: e.target.value })} />
+
+            <div className="max-h-48 overflow-y-auto rounded-lg border border-gray-300 bg-white p-2.5 shadow-sm space-y-1">
+              {users && users.length > 0 ? (
+                users.map((u) => {
+                  const isChecked = Array.isArray(form.assigned_to) && form.assigned_to.includes(u.id);
+
+                  return (
+                    <label
+                      key={u.id}
+                      className={`flex items-center gap-3 p-2 rounded-md transition cursor-pointer select-none ${
+                        isChecked ? 'bg-blue-50 text-blue-900 font-medium' : 'hover:bg-gray-50 text-gray-700'
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                        checked={isChecked}
+                        onChange={(e) => {
+                          const currentList = Array.isArray(form.assigned_to) ? form.assigned_to : [];
+                          if (e.target.checked) {
+                            setForm({ ...form, assigned_to: [...currentList, u.id] });
+                          } else {
+                            setForm({ ...form, assigned_to: currentList.filter((id) => id !== u.id) });
+                          }
+                        }}
+                      />
+                      <span className="text-sm">{u.name}</span>
+                    </label>
+                  );
+                })
+              ) : (
+                <p className="text-xs text-gray-500 italic p-2">Tidak ada anggota tim tersedia.</p>
+              )}
             </div>
+            <p className="mt-1 text-xs text-gray-500">
+              Terpilih: <span className="font-bold text-blue-600">{Array.isArray(form.assigned_to) ? form.assigned_to.length : 0}</span> orang
+            </p>
           </div>
+
+          <div>
+            <label className="label">Deadline</label>
+            <input type="date" required className="input" value={form.deadline} onChange={(e) => setForm({ ...form, deadline: e.target.value })} />
+          </div>
+
           <button className="btn bg-pupr-blue-dark hover:bg-pupr-blue text-white transition-colors disabled:opacity-60 w-full" disabled={saving}>{saving ? 'Menyimpan...' : 'Tambah Subtask'}</button>
         </form>
       </Modal>

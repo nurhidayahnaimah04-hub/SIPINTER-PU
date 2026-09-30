@@ -10,7 +10,12 @@ export async function index(req, res) {
   const { periode_id: periodeId, semester } = await Semester.fromRequest(req);
 
   const params = [user.id];
-  const conditions = [`s.assigned_to = $1`];
+  // Diubah: Cek kolom assigned_to ATAU keberadaan user di tabel perantara subtugas_assignees
+  const conditions = [
+    `(s.assigned_to = $1 OR EXISTS (
+      SELECT 1 FROM subtugas_assignees sa WHERE sa.subtugas_id = s.id AND sa.user_id = $1
+    ))`
+  ];
 
   if (periodeId) {
     params.push(periodeId);
@@ -42,10 +47,19 @@ export async function index(req, res) {
   const { rows } = await pool.query(
     `SELECT s.*,
         json_build_object('id', t.id, 'judul', t.judul, 'team_id', t.team_id, 'periode_id', t.periode_id) AS tugas,
-        json_build_object('id', a.id, 'name', a.name) AS assignee
+        json_build_object('id', a.id, 'name', a.name) AS assignee,
+        COALESCE(
+          (
+            SELECT json_agg(json_build_object('id', u.id, 'name', u.name))
+            FROM subtugas_assignees sa
+            JOIN users u ON u.id = sa.user_id
+            WHERE sa.subtugas_id = s.id
+          ),
+          '[]'::json
+        ) AS assignees
      FROM subtugas s
      JOIN tugas t ON t.id = s.tugas_id
-     JOIN users a ON a.id = s.assigned_to
+     LEFT JOIN users a ON a.id = s.assigned_to
      ${where}
      ORDER BY s.created_at DESC`,
     params
@@ -65,13 +79,22 @@ export async function show(req, res) {
           'team', CASE WHEN tm.id IS NOT NULL THEN json_build_object('id', tm.id, 'nama_tim', tm.nama_tim, 'kode_tim', tm.kode_tim, 'katim_id', tm.katim_id) ELSE NULL END
         ) AS tugas,
         json_build_object('id', a.id, 'name', a.name, 'jabatan', a.jabatan, 'foto', a.foto, 'email', a.email) AS assignee,
+        COALESCE(
+          (
+            SELECT json_agg(json_build_object('id', u.id, 'name', u.name, 'jabatan', u.jabatan, 'foto', u.foto, 'email', u.email))
+            FROM subtugas_assignees sa
+            JOIN users u ON u.id = sa.user_id
+            WHERE sa.subtugas_id = s.id
+          ),
+          '[]'::json
+        ) AS assignees,
         json_build_object('id', c.id, 'name', c.name) AS creator,
         CASE WHEN vk.id IS NOT NULL THEN json_build_object('id', vk.id, 'name', vk.name) ELSE NULL END AS "verifikatorKatim",
         CASE WHEN vs.id IS NOT NULL THEN json_build_object('id', vs.id, 'name', vs.name) ELSE NULL END AS "verifikatorKasubag"
      FROM subtugas s
      JOIN tugas t ON t.id = s.tugas_id
      LEFT JOIN teams tm ON tm.id = t.team_id
-     JOIN users a ON a.id = s.assigned_to
+     LEFT JOIN users a ON a.id = s.assigned_to
      JOIN users c ON c.id = s.created_by
      LEFT JOIN users vk ON vk.id = s.verifikasi_katim_by
      LEFT JOIN users vs ON vs.id = s.verifikasi_kasubag_by
@@ -121,24 +144,38 @@ export async function store(req, res) {
   const tugasId = req.params.tugas;
   const { judul, deskripsi = null, assigned_to, deadline } = req.body || {};
 
-  if (!judul || !assigned_to || !deadline) {
+  // Mendukung assigned_to berbentuk Array maupun ID Tunggal
+  const assigneesList = Array.isArray(assigned_to)
+    ? assigned_to.map(Number).filter(Boolean)
+    : [Number(assigned_to)].filter(Boolean);
+
+  if (!judul || assigneesList.length === 0 || !deadline) {
     return res.status(422).json({ message: 'Data subtugas tidak lengkap (judul, pelaksana, dan deadline wajib diisi).' });
   }
 
   try {
+    const primaryAssignee = assigneesList[0] || null;
+
     const { rows } = await pool.query(
       `INSERT INTO subtugas (tugas_id, judul, deskripsi, assigned_to, deadline, created_by, status, progress)
        VALUES ($1,$2,$3,$4,$5,$6,'Belum Dimulai',0) RETURNING *`,
-      [tugasId, judul, deskripsi, assigned_to, deadline, req.user.id]
+      [tugasId, judul, deskripsi, primaryAssignee, deadline, req.user.id]
     );
     const subtugas = rows[0];
+
+    // Simpan semua anggota ke tabel perantara subtugas_assignees
+    for (const uid of assigneesList) {
+      await pool.query(
+        `INSERT INTO subtugas_assignees (subtugas_id, user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+        [subtugas.id, uid]
+      );
+    }
 
     const files = req.files || [];
     if (files.length > 0) {
       for (const f of files) {
         const { url } = await uploadToSupabase(f, 'lampiran-tugas'); 
         const type = classifyFileType(f.originalname);
-        // Simpan langsung menggunakan subtugas_id
         await pool.query(
           `INSERT INTO subtugas_files (subtugas_id, file_path, file_name, file_type, uploaded_at)
            VALUES ($1,$2,$3,$4,now())`,
@@ -153,20 +190,28 @@ export async function store(req, res) {
       ? new Date(subtugas.deadline).toLocaleDateString('id-ID', { day: '2-digit', month: '2-digit', year: 'numeric' })
       : null;
 
-    await NotificationService.kirim(
-      subtugas.assigned_to,
-      'Subtugas baru diterima',
-      `Anda mendapat subtugas baru: ${subtugas.judul}` + (deadlineStr ? ` (deadline ${deadlineStr})` : ''),
-      `/anggota/subtugas/${subtugas.id}`
-    );
+    // Kirim notifikasi ke SEMUA anggota yang terdaftar di checklist
+    for (const uid of assigneesList) {
+      await NotificationService.kirim(
+        uid,
+        'Subtugas baru diterima',
+        `Anda mendapat subtugas baru: ${subtugas.judul}` + (deadlineStr ? ` (deadline ${deadlineStr})` : ''),
+        `/anggota/subtugas/${subtugas.id}`
+      );
+    }
 
     await ActivityLog.catat(req.user.id, `membuat subtugas ${subtugas.judul}`, 'subtugas', subtugas.id);
 
-    const { rows: assigneeRows } = await pool.query(`SELECT id, name FROM users WHERE id = $1`, [
-      subtugas.assigned_to,
-    ]);
+    const { rows: assigneeRows } = await pool.query(
+      `SELECT u.id, u.name FROM subtugas_assignees sa JOIN users u ON u.id = sa.user_id WHERE sa.subtugas_id = $1`,
+      [subtugas.id]
+    );
 
-    return res.status(201).json({ ...subtugas, assignee: assigneeRows[0] });
+    return res.status(201).json({ 
+      ...subtugas, 
+      assignee: assigneeRows[0] || null,
+      assignees: assigneeRows 
+    });
   } catch (error) {
     return res.status(500).json({ message: "Gagal membuat subtugas: " + error.message });
   }
@@ -183,8 +228,15 @@ export async function update(req, res) {
   const fields = {};
   if (typeof judul !== 'undefined') fields.judul = judul;
   if (typeof deskripsi !== 'undefined') fields.deskripsi = deskripsi || null;
-  if (typeof assigned_to !== 'undefined') fields.assigned_to = assigned_to;
   if (typeof deadline !== 'undefined') fields.deadline = deadline;
+
+  // Jika assigned_to dikirimkan, update kolom assigned_to utama dengan ID pelaksana pertama
+  if (typeof assigned_to !== 'undefined') {
+    const assigneesList = Array.isArray(assigned_to)
+      ? assigned_to.map(Number).filter(Boolean)
+      : [Number(assigned_to)].filter(Boolean);
+    fields.assigned_to = assigneesList[0] || null;
+  }
 
   const keys = Object.keys(fields);
   let subtugas;
@@ -205,12 +257,26 @@ export async function update(req, res) {
 
   if (!subtugas) return res.status(404).json({ message: 'Subtugas tidak ditemukan.' });
 
+  // Update daftar pelaksana di tabel perantara subtugas_assignees
+  if (typeof assigned_to !== 'undefined') {
+    const assigneesList = Array.isArray(assigned_to)
+      ? assigned_to.map(Number).filter(Boolean)
+      : [Number(assigned_to)].filter(Boolean);
+
+    await pool.query(`DELETE FROM subtugas_assignees WHERE subtugas_id = $1`, [subtugasId]);
+    for (const uid of assigneesList) {
+      await pool.query(
+        `INSERT INTO subtugas_assignees (subtugas_id, user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+        [subtugasId, uid]
+      );
+    }
+  }
+
   const files = req.files || [];
   if (files.length > 0) {
     for (const f of files) {
       const { url } = await uploadToSupabase(f, 'lampiran-tugas');
       const type = classifyFileType(f.originalname);
-      // Simpan langsung ke subtugas_id
       await pool.query(
         `INSERT INTO subtugas_files (subtugas_id, file_path, file_name, file_type, uploaded_at)
          VALUES ($1,$2,$3,$4,now())`,
@@ -222,7 +288,20 @@ export async function update(req, res) {
   await recalculateProgress(subtugas.tugas_id);
   await ActivityLog.catat(req.user.id, `mengubah subtugas ${subtugas.judul}`, 'subtugas', subtugas.id);
 
-  const { rows: fresh } = await pool.query(`SELECT * FROM subtugas WHERE id = $1`, [subtugasId]);
+  const { rows: fresh } = await pool.query(
+    `SELECT s.*,
+        COALESCE(
+          (
+            SELECT json_agg(json_build_object('id', u.id, 'name', u.name))
+            FROM subtugas_assignees sa
+            JOIN users u ON u.id = sa.user_id
+            WHERE sa.subtugas_id = s.id
+          ),
+          '[]'::json
+        ) AS assignees
+     FROM subtugas s WHERE s.id = $1`,
+    [subtugasId]
+  );
 
   return res.json(fresh[0]);
 }
