@@ -1,10 +1,5 @@
 # SIPINTER - Sistem Monitoring Progress Kerja Internal 
 
-## DEVELOPED BY:
-### - Brisbane Jovan Rivaldi Sihombing
-### - Yehezkiel Sitomorang
-### - Petra Igor Keliat
-
 Aplikasi web untuk mencatat, mendelegasikan, memantau, dan memverifikasi progres pekerjaan secara berjenjang di lingkungan Balai PU mulai dari Kepala Balai, Kasubag, Ketua Tim (Katim), hingga Anggota tim di lapangan.
 
 Awalnya dibangun dengan Laravel, kini backend telah dimigrasi ke **Express.js (Node.js)** dengan database **PostgreSQL (Supabase)**, sementara tampilan dan fitur frontend **React + Vite + Tailwind** tetap sama persis seperti versi sebelumnya.
