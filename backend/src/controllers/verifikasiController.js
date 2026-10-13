@@ -183,10 +183,9 @@ export async function verifikasiKasubag(req, res) {
 
 export async function antrianKatim(req, res) {
   try {
-    const user = req.user;
+    const userId = req.user.id;
 
-    // QUERY AMAN & TERISOLASI: Menyaring subtugas yang berstatus 'Menunggu Verifikasi Katim'
-    // tanpa JOIN bertumpuk yang menyebabkan amibgu/duplikasi parameter di PostgreSQL
+    // QUERY PRESISI & DENGAN PARAMETER TERPISAH: Mencegah Error 500 di PostgreSQL/Supabase
     const { rows } = await pool.query(
       `SELECT DISTINCT s.*,
           json_build_object(
@@ -203,15 +202,14 @@ export async function antrianKatim(req, res) {
           AND (
             t_tm.katim_id = $1 
             OR t.created_by = $1 
-            OR s.created_by = $1
             OR EXISTS (
               SELECT 1 FROM team_members mem 
               JOIN teams tm ON tm.id = mem.team_id 
-              WHERE mem.user_id = s.assigned_to AND tm.katim_id = $1
+              WHERE mem.user_id = s.assigned_to AND tm.katim_id = $2
             )
           )
         ORDER BY s.updated_at DESC`,
-      [user.id]
+      [userId, userId]
     );
 
     for (const s of rows) {
