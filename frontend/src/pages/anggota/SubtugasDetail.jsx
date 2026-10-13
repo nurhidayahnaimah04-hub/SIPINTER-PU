@@ -6,7 +6,7 @@ import { useAuth } from '../../context/AuthContext'
 import ProgressBar from '../../components/ProgressBar'
 import Loading from '../../components/Loading'
 import { formatDate, statusBadgeClass } from '../../lib/helpers'
-import { ArrowLeft, Paperclip, UploadCloud, Lock, MessageSquare } from 'lucide-react'
+import { ArrowLeft, Paperclip, UploadCloud, Lock, MessageSquare, Trash2, ExternalLink } from 'lucide-react'
 
 export default function SubtugasDetail() {
   const { id } = useParams()
@@ -14,6 +14,7 @@ export default function SubtugasDetail() {
   const [subtugas, setSubtugas] = useState(null)
   const [persentase, setPersentase] = useState(0)
   const [catatan, setCatatan] = useState('')
+  const [linkUrl, setLinkUrl] = useState('')
   const [files, setFiles] = useState([])
   const [saving, setSaving] = useState(false)
   const [msg, setMsg] = useState('')
@@ -39,9 +40,13 @@ export default function SubtugasDetail() {
       const form = new FormData()
       form.append('persentase', persentase)
       form.append('catatan', catatan)
+      if (linkUrl) {
+        form.append('link_url', linkUrl)
+      }
       files.forEach((f) => form.append('files', f))
       await api.post(`/subtugas/${id}/updates`, form, { headers: { 'Content-Type': 'multipart/form-data' } })
       setCatatan('')
+      setLinkUrl('')
       setFiles([])
       setMsg('Progres berhasil diperbarui.')
       load()
@@ -52,10 +57,20 @@ export default function SubtugasDetail() {
     }
   }
 
+  async function handleDeleteUpdate(updateId) {
+    if (!window.confirm('Apakah Anda yakin ingin menghapus riwayat update progres ini?')) return
+    try {
+      await api.delete(`/subtugas/updates/${updateId}`)
+      load()
+    } catch (err) {
+      alert(err.response?.data?.message || 'Gagal menghapus riwayat update.')
+    }
+  }
+
   if (!subtugas) return <Loading />
   const locked = subtugas.locked
 
-  // Filter riwayat update agar sama sekali tidak menampilkan system note (untuk membersihkan sisa data lama)
+  // Filter riwayat update agar tidak menampilkan system note
   const visibleUpdates = subtugas.updates?.filter(u => {
     return !(u.catatan === 'Lampiran subtugas' || u.catatan === 'Lampiran awal subtugas' || u.catatan?.startsWith('Penambahan lampiran'));
   }) || [];
@@ -83,7 +98,7 @@ export default function SubtugasDetail() {
             <p className="text-sm text-gray-600 mt-3">{subtugas.deskripsi || 'Tidak ada deskripsi.'}</p>
             {subtugas.deadline && <p className="text-xs text-gray-400 mt-3">Deadline: {formatDate(subtugas.deadline)}</p>}
 
-            {/* Render Lampiran dari Katim/Kasubag di bagian atas (menyatu dengan detail subtugas) */}
+            {/* Render Lampiran dari Katim/Kasubag di bagian atas */}
             {subtugas.files?.length > 0 && (
               <div className="mt-4 p-3 bg-blue-50/50 rounded-lg border border-blue-100">
                 <p className="text-xs font-semibold text-blue-900 mb-2 flex items-center gap-1">
@@ -138,9 +153,24 @@ export default function SubtugasDetail() {
                     <label className="label">Catatan</label>
                     <textarea className="input" rows={3} value={catatan} onChange={(e) => setCatatan(e.target.value)} placeholder="Jelaskan progres yang sudah dikerjakan..." />
                   </div>
-                  <div className="sm:col-span-2">
-                    <label className="label">Bukti Kerja (foto, PDF, Word, Excel, dll)</label>
-                    <label className="flex flex-col items-center justify-center gap-1 border-2 border-dashed border-gray-300 rounded-lg py-6 px-4 cursor-pointer hover:border-brand-400 text-sm text-gray-500 text-center">
+
+                  {/* Area Bukti Kerja / Lampiran Pendukung */}
+                  <div className="sm:col-span-2 space-y-3">
+                    <label className="label">Bukti Kerja / Lampiran (File & Link URL)</label>
+                    
+                    {/* Input Link URL Pendukung */}
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="text"
+                        className="input text-xs sm:text-sm"
+                        placeholder="Tempelkan link/URL pendukung di sini (misal: Canva, Google Drive, YouTube...)"
+                        value={linkUrl}
+                        onChange={(e) => setLinkUrl(e.target.value)}
+                      />
+                    </div>
+
+                    {/* Area Upload File */}
+                    <label className="flex flex-col items-center justify-center gap-1 border-2 border-dashed border-gray-300 rounded-lg py-5 px-4 cursor-pointer hover:border-brand-400 text-sm text-gray-500 text-center">
                       <UploadCloud size={22} />
                       
                       {files.length > 0 ? (
@@ -154,7 +184,7 @@ export default function SubtugasDetail() {
                         </div>
                       ) : (
                         <>
-                          <span>Klik untuk pilih file (bisa lebih dari satu)</span>
+                          <span>Klik untuk pilih file bukti kerja (bisa lebih dari satu)</span>
                           <span className="text-xs text-gray-400">Maksimal ukuran file 5 MB</span>
                         </>
                       )}
@@ -192,16 +222,44 @@ export default function SubtugasDetail() {
             {visibleUpdates.length === 0 ? <p className="text-sm text-gray-400">Belum ada riwayat progres dari anggota.</p> : (
               <div className="grid sm:grid-cols-2 gap-4">
                 {visibleUpdates.map((u) => (
-                  <div key={u.id} className="border border-gray-100 rounded-lg p-4">
-                    <div className="flex justify-between text-sm">
-                      <span className="font-medium text-gray-800">{u.persentase}% — {u.status}</span>
-                      <span className="text-xs text-gray-400">{formatDate(u.created_at)}</span>
+                  <div key={u.id} className="border border-gray-100 rounded-lg p-4 relative">
+                    <div className="flex justify-between items-start text-sm">
+                      <span className="font-medium text-gray-800">
+                        {u.persentase}% — {subtugas?.status || u.status || 'Sedang Berjalan'}
+                      </span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-gray-400">{formatDate(u.created_at)}</span>
+                        {!locked && (
+                          <button
+                            onClick={() => handleDeleteUpdate(u.id)}
+                            className="text-gray-400 hover:text-red-600 transition-colors p-0.5"
+                            title="Hapus riwayat update ini"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        )}
+                      </div>
                     </div>
                     {u.catatan && <p className="text-sm text-gray-600 mt-1">{u.catatan}</p>}
-                    {u.files?.length > 0 && (
-                      <div className="flex flex-wrap gap-2 mt-2">
-                        {u.files.map((f) => (
-                          <a key={f.id} href={f.url} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-xs text-brand-600 hover:underline">
+                    
+                    {/* Area daftar Lampiran & Link */}
+                    {(u.link_url || u.files?.length > 0) && (
+                      <div className="flex flex-wrap gap-2 mt-3 pt-2 border-t border-gray-50">
+                        {/* Render Link Utama jika ada */}
+                        {u.link_url && (
+                          <a
+                            href={u.link_url}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="flex items-center gap-1 text-xs text-blue-600 hover:underline bg-blue-50/80 px-2 py-1 rounded border border-blue-100 font-medium"
+                          >
+                            <ExternalLink size={12} className="text-blue-500" /> {u.link_url}
+                          </a>
+                        )}
+
+                        {/* PERBAIKAN: Hanya render File Fisik (mencegah link tampil 2 kali) */}
+                        {u.files?.filter(f => f.file_type !== 'link' && f.file_type !== 'lainnya' && f.file_path !== u.link_url).map((f) => (
+                          <a key={f.id} href={f.url} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-xs text-brand-600 hover:underline bg-gray-50 px-2 py-1 rounded border border-gray-200">
                             <Paperclip size={12} /> {f.file_name || `Bukti ${f.id}`}
                           </a>
                         ))}

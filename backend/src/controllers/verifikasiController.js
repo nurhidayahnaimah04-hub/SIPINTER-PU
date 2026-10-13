@@ -139,7 +139,6 @@ export async function verifikasiKasubag(req, res) {
   );
 
   // 2. Notifikasi ditujukan juga ke Katim Pemimpin Tim
-  // Jalur A: Cari Katim via Tim Tugas Utama
   const { rows: teamRows } = await pool.query(
     `SELECT tm.katim_id 
      FROM subtugas s
@@ -151,7 +150,6 @@ export async function verifikasiKasubag(req, res) {
   
   let katimId = teamRows[0]?.katim_id;
 
-  // Jalur B: Fallback jika tidak terikat di tugas utama, cari via team_members anggota
   if (!katimId) {
     const { rows: memberRows } = await pool.query(
       `SELECT tm.katim_id 
@@ -163,7 +161,6 @@ export async function verifikasiKasubag(req, res) {
     katimId = memberRows[0]?.katim_id;
   }
 
-  // Kirim notifikasi ke Katim jika ditemukan
   if (katimId) {
     await NotificationService.kirim(
       katimId,
@@ -188,20 +185,32 @@ export async function antrianKatim(req, res) {
   try {
     const user = req.user;
 
+    // QUERY AMAN & TERISOLASI: Menyaring subtugas yang berstatus 'Menunggu Verifikasi Katim'
+    // tanpa JOIN bertumpuk yang menyebabkan amibgu/duplikasi parameter di PostgreSQL
     const { rows } = await pool.query(
-      `SELECT s.*,
+      `SELECT DISTINCT s.*,
           json_build_object(
-            'id', t.id, 'judul', t.judul,
+            'id', t.id, 
+            'judul', t.judul,
             'team', CASE WHEN t_tm.id IS NOT NULL THEN json_build_object('id', t_tm.id, 'nama_tim', t_tm.nama_tim, 'katim_id', t_tm.katim_id) ELSE NULL END
           ) AS tugas,
           json_build_object('id', a.id, 'name', a.name) AS assignee
         FROM subtugas s
         JOIN tugas t ON t.id = s.tugas_id
         JOIN users a ON a.id = s.assigned_to
-        JOIN team_members a_mem ON a_mem.user_id = a.id
-        JOIN teams assignee_tm ON assignee_tm.id = a_mem.team_id
         LEFT JOIN teams t_tm ON t_tm.id = t.team_id
-        WHERE assignee_tm.katim_id = $1 AND s.status = 'Menunggu Verifikasi Katim'`,
+        WHERE s.status = 'Menunggu Verifikasi Katim'
+          AND (
+            t_tm.katim_id = $1 
+            OR t.created_by = $1 
+            OR s.created_by = $1
+            OR EXISTS (
+              SELECT 1 FROM team_members mem 
+              JOIN teams tm ON tm.id = mem.team_id 
+              WHERE mem.user_id = s.assigned_to AND tm.katim_id = $1
+            )
+          )
+        ORDER BY s.updated_at DESC`,
       [user.id]
     );
 
@@ -210,20 +219,27 @@ export async function antrianKatim(req, res) {
         `SELECT * FROM subtugas_updates WHERE subtugas_id = $1 ORDER BY created_at DESC LIMIT 1`,
         [s.id]
       );
-      if (updateRows[0]) {
+      
+      // Null-safety check untuk mencegah crash saat s.updates kosong
+      if (updateRows && updateRows.length > 0) {
         const { rows: fileRows } = await pool.query(
           `SELECT * FROM subtugas_files WHERE subtugas_update_id = $1`,
           [updateRows[0].id]
         );
-        updateRows[0].files = fileRows.map((f) => ({ ...f, url: fileUrl(req, f.file_path) }));
+        updateRows[0].files = (fileRows || []).map((f) => ({
+          ...f,
+          url: (f.file_type === 'link' || f.file_type === 'lainnya') && f.file_path && f.file_path.startsWith('http')
+            ? f.file_path
+            : fileUrl(req, f.file_path)
+        }));
       }
-      s.updates = updateRows;
+      s.updates = updateRows || [];
     }
 
     return res.json(rows);
   } catch (error) {
     console.error("Error antrian Katim:", error);
-    return res.status(500).json({ message: "Terjadi kesalahan sistem." });
+    return res.status(500).json({ message: "Terjadi kesalahan sistem: " + error.message });
   }
 }
 
@@ -248,14 +264,20 @@ export async function antrianKasubag(req, res) {
         `SELECT * FROM subtugas_updates WHERE subtugas_id = $1 ORDER BY created_at DESC LIMIT 1`,
         [s.id]
       );
-      if (updateRows[0]) {
+      
+      if (updateRows && updateRows.length > 0) {
         const { rows: fileRows } = await pool.query(
           `SELECT * FROM subtugas_files WHERE subtugas_update_id = $1`,
           [updateRows[0].id]
         );
-        updateRows[0].files = fileRows.map((f) => ({ ...f, url: fileUrl(req, f.file_path) }));
+        updateRows[0].files = (fileRows || []).map((f) => ({
+          ...f,
+          url: (f.file_type === 'link' || f.file_type === 'lainnya') && f.file_path && f.file_path.startsWith('http')
+            ? f.file_path
+            : fileUrl(req, f.file_path)
+        }));
       }
-      s.updates = updateRows;
+      s.updates = updateRows || [];
     }
 
     const { rows: tugas } = await pool.query(

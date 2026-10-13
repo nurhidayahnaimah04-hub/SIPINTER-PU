@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import ProgressBar from './ProgressBar'
 import Modal from './Modal'
 import { formatDate, statusBadgeClass } from '../lib/helpers'
-import { Paperclip, CheckCircle2, XCircle, Lock, MessageSquare, Send, Pencil, Trash2, AlertTriangle, UploadCloud, X } from 'lucide-react'
+import { Paperclip, CheckCircle2, XCircle, Lock, MessageSquare, Send, Pencil, Trash2, AlertTriangle, X, Link as LinkIcon, Plus } from 'lucide-react'
 import api from '../lib/api'
 
 export default function SubtugasRow({ subtugas, role, onChanged, users = [] }) {
@@ -12,27 +12,36 @@ export default function SubtugasRow({ subtugas, role, onChanged, users = [] }) {
   const [commentText, setCommentText] = useState('')
   const [sendingComment, setSendingComment] = useState(false)
   
-  // State fallback untuk memastikan daftar user selalu ada (khususnya pada Tugas Umum)
   const [fallbackUsers, setFallbackUsers] = useState([])
 
   const [editOpen, setEditOpen] = useState(false)
-  // State assigned_to berbentuk Array untuk menampung banyak ID anggota
   const [editForm, setEditForm] = useState({ judul: '', deskripsi: '', assigned_to: [], deadline: '' })
   const [editSaving, setEditSaving] = useState(false)
   const [editError, setEditError] = useState('')
   const [editFiles, setEditFiles] = useState([]) 
+  
+  const [attachMode, setAttachMode] = useState('file') // 'file' atau 'link'
+  const [editLinks, setEditLinks] = useState([])
+  const [linkInput, setLinkInput] = useState('')
 
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [deleteError, setDeleteError] = useState('')
 
+  const [currentUserId, setCurrentUserId] = useState(null)
+
   const canVerifikasiKatim = role === 'katim' && subtugas.status === 'Menunggu Verifikasi Katim'
   const canVerifikasiKasubag = role === 'kasubag' && subtugas.status === 'Menunggu Verifikasi Kasubag'
-  
-  // Membuka izin edit & kelola subtugas untuk role 'anggota'
   const canManageSubtugas = ['kasubag', 'katim', 'anggota', 'kabalai'].includes(role)
 
-  // DIPERBAIKI: Selalu tarik data /users-lite agar daftar pegawai tidak kosong di Tugas Umum
+  useEffect(() => {
+    api.get('/me')
+      .then((res) => {
+        if (res.data?.id) setCurrentUserId(res.data.id);
+      })
+      .catch((err) => console.error("Gagal memuat profil user:", err));
+  }, []);
+
   useEffect(() => {
     api.get('/users-lite')
       .then((res) => {
@@ -43,17 +52,14 @@ export default function SubtugasRow({ subtugas, role, onChanged, users = [] }) {
       .catch((err) => console.error("Gagal memuat daftar user lite:", err));
   }, [users]);
 
-  // Gabungkan sumber user dari prop atau fallback
   const availableUsersList = users && users.length > 0 ? users : fallbackUsers;
 
-  // Gabungkan file dari skema baru dan lama untuk ditampilkan di Detail & Modal Edit
   const oldSystemFiles = subtugas.updates
     ?.filter(u => u.catatan === 'Lampiran subtugas' || u.catatan === 'Lampiran awal subtugas' || u.catatan?.startsWith('Penambahan lampiran'))
     ?.flatMap(u => u.files || []) || [];
   
   const lampiranAtasan = [...(subtugas.files || []), ...oldSystemFiles];
 
-  // Sembunyikan update sistem lama dari riwayat progres
   const visibleUpdates = subtugas.updates?.filter(u => {
     return !(u.catatan === 'Lampiran subtugas' || u.catatan === 'Lampiran awal subtugas' || u.catatan?.startsWith('Penambahan lampiran'));
   }) || [];
@@ -91,7 +97,6 @@ export default function SubtugasRow({ subtugas, role, onChanged, users = [] }) {
   }
 
   function openEdit() {
-    // DIPERBAIKI: Pastikan inisialisasi mengambil ID secara bersih dan akurat agar tidak menumpuk/lengket
     let initialAssignees = [];
     if (subtugas.assignees && subtugas.assignees.length > 0) {
       initialAssignees = subtugas.assignees.map(a => a.id);
@@ -108,8 +113,25 @@ export default function SubtugasRow({ subtugas, role, onChanged, users = [] }) {
       deadline: (subtugas.deadline || '').slice(0, 10),
     })
     setEditFiles([]) 
+    setEditLinks([])
+    setLinkInput('')
+    setAttachMode('file')
     setEditError('')
     setEditOpen(true)
+  }
+
+  function handleAddLink() {
+    if (!linkInput.trim()) return;
+    let urlFormatted = linkInput.trim();
+    if (!/^https?:\/\//i.test(urlFormatted)) {
+      urlFormatted = 'https://' + urlFormatted;
+    }
+    setEditLinks([...editLinks, urlFormatted]);
+    setLinkInput('');
+  }
+
+  function handleRemoveLink(index) {
+    setEditLinks(editLinks.filter((_, idx) => idx !== index));
   }
 
   async function handleEdit(e) {
@@ -133,11 +155,13 @@ export default function SubtugasRow({ subtugas, role, onChanged, users = [] }) {
       formData.append('judul', editForm.judul)
       formData.append('deskripsi', editForm.deskripsi)
       formData.append('deadline', editForm.deadline)
-
-      // Kirim array ID anggota sebagai String JSON agar diterima utuh oleh backend
       formData.append('assigned_to', JSON.stringify(assignedArray))
 
       editFiles.forEach((f) => formData.append('files', f))
+
+      if (editLinks.length > 0) {
+        formData.append('links', JSON.stringify(editLinks))
+      }
 
       await api.put(`/subtugas/${subtugas.id}`, formData, {
         headers: { 'Content-Type': 'multipart/form-data' }
@@ -145,6 +169,7 @@ export default function SubtugasRow({ subtugas, role, onChanged, users = [] }) {
       
       setEditOpen(false)
       setEditFiles([])
+      setEditLinks([])
       onChanged?.()
     } catch (err) {
       setEditError(err.response?.data?.message || 'Gagal menyimpan perubahan.')
@@ -181,7 +206,16 @@ export default function SubtugasRow({ subtugas, role, onChanged, users = [] }) {
     }
   }
 
-  // Formatting gabungan nama pelaksana (Multi-Assignee)
+  async function handleDeleteUpdate(updateId) {
+    if (!window.confirm("Apakah Anda yakin ingin menghapus catatan progres ini?")) return;
+    try {
+      await api.delete(`/subtugas/updates/${updateId}`);
+      onChanged?.();
+    } catch (err) {
+      alert(err.response?.data?.message || 'Gagal menghapus progres.');
+    }
+  }
+
   const displayAssignees = subtugas.assignees && subtugas.assignees.length > 0
     ? subtugas.assignees.map(a => a.name).join(', ')
     : (subtugas.assignee?.name || 'Belum ada pelaksana');
@@ -195,18 +229,15 @@ export default function SubtugasRow({ subtugas, role, onChanged, users = [] }) {
             {subtugas.locked && <Lock size={13} className="text-gray-400" />}
           </p>
           
-          {/* Menampilkan semua nama anggota yang dicentang */}
           <p className="text-xs text-gray-500 mt-1 mb-2">
             <span className="font-medium text-gray-700">{displayAssignees}</span>
-            {subtugas.deadline ? ` · Deadline ${formatDate(subtugas.deadline)}` : ''}
+            {subtugas.deadline ? ` • Deadline ${formatDate(subtugas.deadline)}` : ''}
           </p>
 
-          {/* Menampilkan Deskripsi Subtugas */}
           {subtugas.deskripsi && (
             <p className="text-sm text-gray-600 mb-3 whitespace-pre-wrap">{subtugas.deskripsi}</p>
           )}
 
-          {/* Menampilkan Lampiran Katim/Kasubag di luar */}
           {lampiranAtasan.length > 0 && (
             <div className="p-3 bg-blue-50/50 rounded-lg border border-blue-100 mb-3 w-full">
               <p className="text-xs font-semibold text-blue-900 mb-2 flex items-center gap-1">
@@ -214,8 +245,19 @@ export default function SubtugasRow({ subtugas, role, onChanged, users = [] }) {
               </p>
               <div className="flex flex-wrap gap-2">
                 {lampiranAtasan.map((f) => (
-                  <a key={f.id} href={f.url} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-xs text-brand-600 hover:underline bg-white px-2 py-1.5 rounded border border-gray-200 hover:border-brand-300 transition-colors">
-                    <Paperclip size={12} className="text-brand-500" /> {f.file_name || `Lampiran ${f.id}`}
+                  <a 
+                    key={f.id} 
+                    href={f.url} 
+                    target="_blank" 
+                    rel="noreferrer" 
+                    className="flex items-center gap-1 text-xs text-brand-600 hover:underline bg-white px-2 py-1.5 rounded border border-gray-200 hover:border-brand-300 transition-colors"
+                  >
+                    {f.file_type === 'link' ? (
+                      <LinkIcon size={12} className="text-blue-500" />
+                    ) : (
+                      <Paperclip size={12} className="text-brand-500" />
+                    )} 
+                    {f.file_name || `Lampiran ${f.id}`}
                   </a>
                 ))}
               </div>
@@ -240,28 +282,63 @@ export default function SubtugasRow({ subtugas, role, onChanged, users = [] }) {
 
       <div className="mt-2"><ProgressBar value={subtugas.progress} /></div>
 
-      {/* Render riwayat update dari Anggota */}
       {visibleUpdates.length > 0 && (
         <div className="mt-2 bg-gray-50 rounded-lg p-3 text-sm">
           <div className="mt-2 space-y-2">
-            {visibleUpdates.map((u) => (
-              <div key={u.id} className="bg-gray-50 rounded-lg p-3 text-sm border border-gray-100">
-                <div className="flex justify-between text-xs text-gray-400 mb-1">
-                  <span>Progres {u.persentase}% {u.user?.name ? `oleh ${u.user.name}` : ''}</span>
-                  <span>{formatDate(u.created_at)}</span>
-                </div>
-                <p className="text-gray-600">{u.catatan || 'Tidak ada catatan dari anggota.'}</p>
-                {u.files?.length > 0 && (
-                  <div className="flex flex-wrap gap-2 mt-2">
-                    {u.files.map((f) => (
-                      <a key={f.id} href={f.url} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-xs text-brand-600 hover:underline">
-                        <Paperclip size={12} /> {f.file_name || `Bukti ${f.id}`}
-                      </a>
-                    ))}
+            {visibleUpdates.map((u) => {
+              const isOwner = currentUserId && u.user_id === currentUserId;
+              const isAtasan = ['katim', 'kasubag', 'kabalai'].includes(role);
+              const canDeleteProgress = isOwner || isAtasan;
+
+              return (
+                <div key={u.id} className="bg-gray-50 rounded-lg p-3 text-sm border border-gray-100 relative">
+                  <div className="flex justify-between items-center text-xs text-gray-400 mb-1">
+                    {/* MENAMPILKAN PERSENTASE DAN STATUS SUBTUGAS SECARA LENGKAP */}
+                    <span>
+                      Progres {u.progress ?? u.persentase}% {subtugas.status ? `- ${subtugas.status}` : ''} {u.user?.name ? `oleh ${u.user.name}` : ''}
+                    </span>
+                    
+                    <div className="flex items-center gap-2">
+                      <span>{formatDate(u.created_at)}</span>
+                      
+                      {canDeleteProgress && (
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteUpdate(u.id)}
+                          title="Hapus progres ini"
+                          className="text-gray-400 hover:text-red-600 transition-colors p-1 rounded-md hover:bg-red-50"
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      )}
+                    </div>
                   </div>
-                )}
-              </div>
-            ))}
+                  
+                  <p className="text-gray-600">{u.catatan || 'Tidak ada catatan dari anggota.'}</p>
+                  
+                  {u.files?.length > 0 && (
+                    <div className="flex flex-wrap gap-2 mt-2">
+                      {u.files.map((f) => (
+                        <a 
+                          key={f.id} 
+                          href={f.url} 
+                          target="_blank" 
+                          rel="noreferrer" 
+                          className="flex items-center gap-1 text-xs text-brand-600 hover:underline bg-white px-2 py-1 rounded border border-gray-200"
+                        >
+                          {f.file_type === 'link' ? (
+                            <LinkIcon size={12} className="text-blue-500" />
+                          ) : (
+                            <Paperclip size={12} className="text-brand-500" />
+                          )} 
+                          {f.file_name || `Bukti ${f.id}`}
+                        </a>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         </div>
       )}
@@ -309,7 +386,7 @@ export default function SubtugasRow({ subtugas, role, onChanged, users = [] }) {
       </div>
 
       {canManageSubtugas && (
-        <Modal open={editOpen} onClose={() => { setEditOpen(false); setEditFiles([]); }} title={<span className="inline-block -mx-6 -mt-6 mb-2 px-6 py-4 bg-pupr-yellow text-pupr-blue-dark font-semibold rounded-t-xl w-[calc(100%+3rem)]">Edit Subtugas</span>}>
+        <Modal open={editOpen} onClose={() => { setEditOpen(false); setEditFiles([]); setEditLinks([]); }} title={<span className="inline-block -mx-6 -mt-6 mb-2 px-6 py-4 bg-pupr-yellow text-pupr-blue-dark font-semibold rounded-t-xl w-[calc(100%+3rem)]">Edit Subtugas</span>}>
           <form onSubmit={handleEdit} className="space-y-4">
             {editError && <div className="bg-red-50 text-red-700 text-sm px-3 py-2 rounded-lg">{editError}</div>}
             
@@ -323,7 +400,6 @@ export default function SubtugasRow({ subtugas, role, onChanged, users = [] }) {
               <textarea className="input" rows={2} value={editForm.deskripsi} onChange={(e) => setEditForm({ ...editForm, deskripsi: e.target.value })} />
             </div>
             
-            {/* Tampilkan Lampiran dari Subtugas di form edit */}
             {lampiranAtasan.length > 0 && (
               <div className="bg-gray-50 border border-gray-100 rounded-lg p-3">
                 <label className="label text-gray-700">Lampiran Saat Ini</label>
@@ -331,10 +407,10 @@ export default function SubtugasRow({ subtugas, role, onChanged, users = [] }) {
                   {lampiranAtasan.map((f) => (
                     <div key={f.id} className="flex items-center justify-between bg-white border border-gray-200 rounded-md p-2">
                       <a href={f.url} target="_blank" rel="noreferrer" className="flex items-center gap-2 text-xs text-brand-600 hover:underline truncate mr-2">
-                        <Paperclip size={14} className="flex-shrink-0" />
+                        {f.file_type === 'link' ? <LinkIcon size={14} className="text-blue-500 flex-shrink-0" /> : <Paperclip size={14} className="flex-shrink-0" />}
                         <span className="truncate">{f.file_name || `File ${f.id}`}</span>
                       </a>
-                      <button type="button" onClick={() => handleDeleteFile(f.id)} className="text-red-500 hover:bg-red-50 p-1.5 rounded-md transition-colors flex-shrink-0" title="Hapus file ini">
+                      <button type="button" onClick={() => handleDeleteFile(f.id)} className="text-red-500 hover:bg-red-50 p-1.5 rounded-md transition-colors flex-shrink-0" title="Hapus lampiran ini">
                         <X size={14} />
                       </button>
                     </div>
@@ -343,50 +419,112 @@ export default function SubtugasRow({ subtugas, role, onChanged, users = [] }) {
               </div>
             )}
 
+            {/* Opsi Lampiran (File / Link) */}
             <div>
               <label className="label">Tambahkan Lampiran Baru (Opsional)</label>
-              <label className="flex flex-col items-center justify-center gap-1 border-2 border-dashed border-gray-300 rounded-lg py-4 px-4 cursor-pointer hover:border-brand-400 text-sm text-gray-500 text-center">
-                <UploadCloud size={20} />
-                {editFiles.length > 0 ? (
-                  <div className="flex flex-col items-center mt-2 w-full">
-                    <span className="font-semibold text-brand-600 mb-1">{editFiles.length} file dipilih:</span>
-                    {editFiles.map((f, index) => (
-                      <span key={index} className="text-xs text-gray-600 truncate max-w-xs sm:max-w-sm w-full">
-                        • {f.name}
-                      </span>
-                    ))}
+              
+              <div className="flex gap-1 p-1 bg-gray-100 rounded-lg w-fit text-xs font-semibold mb-2">
+                <button
+                  type="button"
+                  onClick={() => setAttachMode('file')}
+                  className={`px-3 py-1.5 rounded-md transition-all ${
+                    attachMode === 'file' ? 'bg-white text-blue-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+                  }`}
+                >
+                  📁 Upload File
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAttachMode('link')}
+                  className={`px-3 py-1.5 rounded-md transition-all ${
+                    attachMode === 'link' ? 'bg-white text-blue-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+                  }`}
+                >
+                  🔗 Sematkan Link
+                </button>
+              </div>
+
+              {attachMode === 'file' ? (
+                <label className="flex items-center justify-between border border-gray-300 rounded-lg p-3 cursor-pointer hover:bg-gray-50 text-sm text-gray-600 transition-colors">
+                  <div className="flex items-center gap-2">
+                    <Paperclip size={16} className="text-gray-400" />
+                    <span>
+                      {editFiles.length > 0 ? (
+                        <span className="font-medium text-brand-600">{editFiles.length} file dipilih</span>
+                      ) : (
+                        <span>Pilih file dokumen / foto <small className="text-gray-400">(maks 5 MB)</small></span>
+                      )}
+                    </span>
                   </div>
-                ) : (
-                  <span>
-                    Klik untuk melampirkan file tambahan <br />
-                    <small className="text-gray-400">(Maksimal 5 MB per file)</small>
-                  </span>
-                )}
+                  <span className="text-xs bg-gray-100 px-2.5 py-1 rounded border text-gray-600 font-medium">Cari File</span>
 
-                <input
-                  type="file"
-                  multiple
-                  hidden
-                  accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.csv,.txt,.zip"
-                  onChange={(e) => {
-                    const selectedFiles = Array.from(e.target.files);
-                    const MAX_SIZE = 5 * 1024 * 1024; // 5 MB dalam Bytes
+                  <input
+                    type="file"
+                    multiple
+                    hidden
+                    accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.csv,.txt,.zip"
+                    onChange={(e) => {
+                      const selectedFiles = Array.from(e.target.files);
+                      const MAX_SIZE = 5 * 1024 * 1024; // 5 MB
 
-                    const isOverSize = selectedFiles.some((file) => file.size > MAX_SIZE);
+                      const isOverSize = selectedFiles.some((file) => file.size > MAX_SIZE);
 
-                    if (isOverSize) {
-                      alert("Ada file yang ukurannya melebihi 5 MB! Harap pilih file yang lebih kecil.");
-                      e.target.value = "";
-                      return;
-                    }
+                      if (isOverSize) {
+                        alert("Ada file yang ukurannya melebihi 5 MB! Harap pilih file yang lebih kecil.");
+                        e.target.value = "";
+                        return;
+                      }
 
-                    setEditFiles(selectedFiles);
-                  }}
-                />
-              </label>
+                      setEditFiles(selectedFiles);
+                    }}
+                  />
+                </label>
+              ) : (
+                <div className="space-y-2">
+                  <div className="flex gap-2">
+                    {/* Menggunakan type="text" agar pengguna bebas menempelkan link tanpa diblokir validasi bawaan browser */}
+                    <input
+                      type="text"
+                      placeholder="Tempelkan URL (contoh: drive.google.com/xyz)"
+                      value={linkInput}
+                      onChange={(e) => setLinkInput(e.target.value)}
+                      className="input flex-1 text-sm"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleAddLink}
+                      className="btn bg-blue-900 text-white text-xs px-3 hover:bg-blue-950 flex items-center gap-1"
+                    >
+                      <Plus size={14} /> Tambah
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* List File Terpilih */}
+              {editFiles.length > 0 && attachMode === 'file' && (
+                <div className="flex flex-wrap gap-1.5 mt-2">
+                  {editFiles.map((f, idx) => (
+                    <span key={idx} className="inline-flex items-center gap-1 px-2.5 py-1 bg-gray-100 text-gray-700 text-xs rounded-md border border-gray-200">
+                      📄 <span className="max-w-xs truncate">{f.name}</span>
+                    </span>
+                  ))}
+                </div>
+              )}
+
+              {/* List Link Terpilih */}
+              {editLinks.length > 0 && (
+                <div className="flex flex-wrap gap-1.5 mt-2">
+                  {editLinks.map((link, idx) => (
+                    <span key={idx} className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-blue-50 text-blue-800 text-xs rounded-md border border-blue-200">
+                      🔗 <span className="max-w-xs truncate">{link}</span>
+                      <button type="button" onClick={() => handleRemoveLink(idx)} className="text-red-500 font-bold ml-1 hover:text-red-700">✕</button>
+                    </span>
+                  ))}
+                </div>
+              )}
             </div>
 
-            {/* Checklist Multi-Select Anggota Tim pada Modal Edit dengan Fallback List */}
             <div>
               <div className="flex justify-between items-center mb-1">
                 <label className="label mb-0">Anggota Tim Pelaksana</label>

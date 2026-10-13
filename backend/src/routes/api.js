@@ -100,6 +100,20 @@ router.post(
   h(SubtugasUpdateController.store)
 );
 
+// PERBAIKAN ROUTE HAPUS: Menyelaraskan URL frontend `/subtugas/updates/:update` dengan `SubtugasUpdateController.destroy`
+router.delete(
+  '/subtugas/updates/:update',
+  role('kasubag', 'katim', 'anggota', 'kabalai'),
+  h(SubtugasUpdateController.destroy)
+);
+
+// Tetap sediakan alternatif route `/subtugas-updates/:update` agar kedua variasi endpoint ter-cover
+router.delete(
+  '/subtugas-updates/:update',
+  role('kasubag', 'katim', 'anggota', 'kabalai'),
+  h(SubtugasUpdateController.destroy)
+);
+
 // Verifikasi ganda: Katim (tahap 1) -> Kasubag (tahap 2, final)
 router.post(
   '/subtugas/:subtugas/verifikasi-katim',
