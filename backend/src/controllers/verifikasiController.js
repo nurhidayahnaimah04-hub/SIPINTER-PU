@@ -183,16 +183,15 @@ export async function verifikasiKasubag(req, res) {
 
 export async function antrianKatim(req, res) {
   try {
-    // DISTINCT DIHAPUS agar PostgreSQL tidak crash dengan error type json
+    // Kueri murni tanpa fungsi json_build_object SQL agar bebas dari error 'equality operator for type json'
     const { rows } = await pool.query(
       `SELECT 
           s.*,
-          json_build_object(
-            'id', t.id, 
-            'judul', t.judul,
-            'team', CASE WHEN t_tm.id IS NOT NULL THEN json_build_object('id', t_tm.id, 'nama_tim', t_tm.nama_tim, 'katim_id', t_tm.katim_id) ELSE NULL END
-          ) AS tugas,
-          json_build_object('id', a.id, 'name', a.name) AS assignee
+          t.judul AS tugas_judul,
+          t_tm.id AS team_id,
+          t_tm.nama_tim,
+          t_tm.katim_id,
+          a.name AS assignee_name
         FROM subtugas s
         JOIN tugas t ON t.id = s.tugas_id
         JOIN users a ON a.id = s.assigned_to
@@ -202,6 +201,20 @@ export async function antrianKatim(req, res) {
     );
 
     for (const s of rows) {
+      // Pembentukan struktur objek JSON dilakukan secara aman di JavaScript
+      s.tugas = {
+        id: s.tugas_id,
+        judul: s.tugas_judul || '',
+        team: s.team_id
+          ? { id: s.team_id, nama_tim: s.nama_tim, katim_id: s.katim_id }
+          : null
+      };
+
+      s.assignee = {
+        id: s.assigned_to,
+        name: s.assignee_name || ''
+      };
+
       const { rows: updateRows } = await pool.query(
         `SELECT * FROM subtugas_updates WHERE subtugas_id = $1 ORDER BY created_at DESC LIMIT 1`,
         [s.id]
