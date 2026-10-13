@@ -1,7 +1,7 @@
 import axios from 'axios'
 
 // Tulis langsung URL Railway agar tidak tergantung pada Vercel Env Var
-const baseURL = 'http://localhost:8000/api'
+const baseURL = '[https://sipinter-pu-production.up.railway.app](https://sipinter-pu-production.up.railway.app)'
 
 const api = axios.create({ 
   baseURL: baseURL,

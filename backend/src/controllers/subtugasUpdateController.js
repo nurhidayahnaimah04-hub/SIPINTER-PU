@@ -35,7 +35,6 @@ function parseLinks(input) {
 export async function index(req, res) {
   const subtugasId = req.params.subtugas;
 
-  // PERBAIKAN: Sertakan s.status dari tabel subtugas agar u.status atau subtugas.status terbaca di riwayat
   const { rows } = await pool.query(
     `SELECT su.*, s.status AS status, json_build_object('id', u.id, 'name', u.name, 'role', u.role) AS user
      FROM subtugas_updates su
@@ -113,7 +112,7 @@ export async function store(req, res) {
 
       if (formattedArrayLink && formattedArrayLink !== formattedSingleLink) {
         await pool.query(
-          `INSERT INTO subtugas_files (subtugas_id, subtugas_update_id, file_path, file_name, file_type, uploaded_at)
+          `INSERT INTO subtugas_files (subtugas_id, subtugas_update_id, file_path, file_path, file_type, uploaded_at)
            VALUES ($1, $2, $3, $4, 'lainnya', now())`,
           [subtugasId, update.id, formattedArrayLink, nameStr]
         );
@@ -121,7 +120,6 @@ export async function store(req, res) {
     }
 
     // 5. Update status & persentase subtugas utama
-    // UBAH HANYA BAGIAN INI: Jika progres 100%, status berubah menjadi 'Menunggu Verifikasi Katim' agar masuk ke antrian Katim
     const newStatus = valProgress === 100 ? 'Menunggu Verifikasi Katim' : valProgress > 0 ? 'Sedang Berjalan' : 'Belum Dimulai';
 
     await pool.query(
@@ -186,7 +184,6 @@ export async function store(req, res) {
 }
 
 export async function destroy(req, res) {
-  // Membaca ID update secara fleksibel baik dari :update maupun :id
   const updateId = req.params.update || req.params.id;
 
   const { rows } = await pool.query(`SELECT * FROM subtugas_updates WHERE id = $1`, [updateId]);
