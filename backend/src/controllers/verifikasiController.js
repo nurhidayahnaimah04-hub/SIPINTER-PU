@@ -183,12 +183,10 @@ export async function verifikasiKasubag(req, res) {
 
 export async function antrianKatim(req, res) {
   try {
-    const user = req.user;
-
-    // QUERY AMAN & TERISOLASI: Menyaring subtugas yang berstatus 'Menunggu Verifikasi Katim'
-    // tanpa JOIN bertumpuk yang menyebabkan amibgu/duplikasi parameter di PostgreSQL
+    // DISTINCT DIHAPUS agar PostgreSQL tidak crash dengan error type json
     const { rows } = await pool.query(
-      `SELECT DISTINCT s.*,
+      `SELECT 
+          s.*,
           json_build_object(
             'id', t.id, 
             'judul', t.judul,
@@ -209,7 +207,6 @@ export async function antrianKatim(req, res) {
         [s.id]
       );
       
-      // Null-safety check untuk mencegah crash saat s.updates kosong
       if (updateRows && updateRows.length > 0) {
         const { rows: fileRows } = await pool.query(
           `SELECT * FROM subtugas_files WHERE subtugas_update_id = $1`,
